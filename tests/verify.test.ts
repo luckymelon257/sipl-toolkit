@@ -123,3 +123,10 @@ test('checkVC samples when the box is too large and says so', () => {
   assert.equal(r.status === 'checked' && r.mode, 'sampled');
   assert.equal(r.status === 'checked' && r.cases, 1000);
 });
+
+test('vacuous conditions are pointed out', () => {
+  const narrow = verifyProgram(load('not-inductive.sipl'));
+  assert.match(narrow.summary, /condition\(s\) 3 never had a true hypothesis/);
+  const wide = verifyProgram(load('not-inductive.sipl'), { range: [0, 12] });
+  assert.doesNotMatch(wide.summary, /never had a true hypothesis/);
+});

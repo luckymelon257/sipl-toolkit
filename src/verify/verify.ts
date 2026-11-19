@@ -156,7 +156,12 @@ export function verifyProgram(program: Program, opts: BoundsOptions & { maxRuns?
   const failed = vcs.filter((v) => v.result.status === 'refuted');
   const verdict = runs.violations.length > 0 ? 'refuted' : failed.length > 0 ? 'unproven' : 'checked-in-bounds';
   const total = verdict === 'checked-in-bounds' && loops.every((w) => w.variant);
-  return { diagnostics, vcs, runs, verdict, total, range, summary: summarize(verdict, total, failed, runs, range) };
+  const vacuous = vcs.filter((v) => v.result.status === 'checked' && v.result.relevant === 0).map((v) => v.id);
+  let summary = summarize(verdict, total, failed, runs, range);
+  if (vacuous.length > 0) {
+    summary += ` Note: condition(s) ${vacuous.join(', ')} never had a true hypothesis in the box, so they were not really tested; widen the range.`;
+  }
+  return { diagnostics, vcs, runs, verdict, total, range, summary };
 }
 
 function runAll(program: Program, loops: While[], range: [number, number], maxRuns: number): VerifyReport['runs'] {
