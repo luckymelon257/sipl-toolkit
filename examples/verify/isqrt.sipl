@@ -1,0 +1,10 @@
+// floor(sqrt(n)): R is the largest number whose square does not exceed N.
+//@ pre: N ≥ 0
+begin
+  R := 0;
+  //@ invariant: R ≥ 0 ∧ R * R ≤ N
+  //@ variant: N - R * R
+  while ¬(R + 1) * (R + 1) > N do
+    R := R + 1
+end
+//@ post: R * R ≤ N ∧ (R + 1) * (R + 1) > N

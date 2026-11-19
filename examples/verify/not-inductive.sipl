@@ -1,0 +1,11 @@
+// The invariant X ≠ 5 is true in every run (X stays even) but is not inductive:
+// from X = 3 one iteration leads to X = 5. The assistant reports the failed step
+// with a counterexample and shows that no real run violates it.
+//@ pre: true
+begin
+  X := 0;
+  //@ invariant: X ≠ 5
+  while X < 10 do
+    X := X + 2
+end
+//@ post: X ≥ 10

@@ -31,6 +31,8 @@ export interface EvalOptions {
   record?: boolean;
   /** Maximum number of recorded steps (default 5 000). */
   maxSteps?: number;
+  /** Called before each test of a loop condition: `loopId` is the AST id of the while, `iteration` counts from 0. */
+  onLoopHead?: (loopId: number, iteration: number, state: State) => void;
 }
 
 export type Formula = 'AF_S' | 'AF_AS' | 'AF_SEQ' | 'AF_IF' | 'AF_WH' | 'AF_ID' | 'AF_CALL' | 'AF_BOT';
@@ -119,6 +121,7 @@ class Evaluator {
         const cond = printTerm(t.cond);
         let cur = st;
         for (let k = 0; ; k++) {
+          this.opts.onLoopHead?.(t.ref?.nodeId ?? -1, k, cur);
           const c = this.bool(t.cond, cur, level);
           const at = cur;
           this.log('AF_WH', t, () => `st${k} = ${formatState(at)}, ${cond}(st${k}) = ${c}${c ? '' : `, result st${k}`}`);

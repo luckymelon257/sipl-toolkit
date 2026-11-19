@@ -1,0 +1,14 @@
+// 1 + 2 + ... + n = n(n + 1)/2, stated without division.
+//@ pre: N = n ∧ n ≥ 0
+begin
+  S := 0;
+  K := 0;
+  //@ invariant: 2 * S = K * (K + 1) ∧ K ≤ N ∧ N = n
+  //@ variant: N - K
+  while N > K do
+  begin
+    K := K + 1;
+    S := S + K
+  end
+end
+//@ post: 2 * S = n * (n + 1)

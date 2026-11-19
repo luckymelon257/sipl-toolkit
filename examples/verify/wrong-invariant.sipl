@@ -1,0 +1,12 @@
+// A wrong invariant for x^y: it fails already on loop entry.
+//@ pre: X = x ∧ Y = y ∧ y ≥ 0
+begin
+  R := 1;
+  //@ invariant: Y ≥ 0 ∧ R * X ^ Y = x ^ y + 1
+  while Y > 0 do
+  begin
+    R := R * X;
+    Y := Y - 1
+  end
+end
+//@ post: R = x ^ y

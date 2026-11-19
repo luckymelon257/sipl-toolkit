@@ -4,7 +4,8 @@ import { State, checkedInt } from './values.js';
 /**
  * Value of an assertion-language expression on a state, or `undefined` when it is not defined
  * (unbound variable, division by zero, negative exponent, overflow, unknown function).
- * Connectives are strict: an undefined operand makes the whole formula undefined.
+ * Connectives are evaluated left to right: `false ∧ ⊥ = false`, `true ∨ ⊥ = true`, `false → ⊥ = true`,
+ * so a guard such as `Y ≥ 0 ∧ X ^ Y = 1` is defined for every Y.
  */
 export function evalAssertion(e: Expr, st: State): number | boolean | undefined {
   const num = (x: Expr) => {
@@ -55,10 +56,13 @@ export function evalAssertion(e: Expr, st: State): number | boolean | undefined 
       return undefined;
     }
     case 'logic': {
+      // Left-to-right (McCarthy) evaluation: the left operand may decide the result alone.
       const l = bool(e.left);
-      const r = bool(e.right);
-      if (l === undefined || r === undefined) return undefined;
-      return e.op === 'and' ? l && r : e.op === 'or' ? l || r : !l || r;
+      if (l === undefined) return undefined;
+      if (e.op === 'and' && !l) return false;
+      if (e.op === 'or' && l) return true;
+      if (e.op === 'implies' && !l) return true;
+      return bool(e.right);
     }
     case 'not': {
       const v = bool(e.operand);
@@ -96,4 +100,43 @@ function gcd(a: number, b: number): number {
   b = Math.abs(b);
   while (b !== 0) [a, b] = [b, a % b];
   return a;
+}
+
+const PREC: Record<string, number> = {
+  implies: 1, or: 2, and: 3, not: 4, compare: 5, '+': 6, '-': 6, '*': 7, div: 7, mod: 7, '^': 8,
+};
+const SHOW: Record<string, string> = { and: '∧', or: '∨', implies: '→', '>=': '≥', '<=': '≤', '!=': '≠' };
+
+function precedence(e: Expr): number {
+  switch (e.kind) {
+    case 'logic': return PREC[e.op];
+    case 'not': return PREC.not;
+    case 'compare': return PREC.compare;
+    case 'binary': return PREC[e.op];
+    case 'cond': return 0;
+    default: return 10;
+  }
+}
+
+/** Prints an expression in assertion syntax (Unicode connectives) with the fewest parentheses. */
+export function printExpr(e: Expr): string {
+  const wrap = (child: Expr, needs: boolean) => (needs ? `(${printExpr(child)})` : printExpr(child));
+  const p = precedence(e);
+  switch (e.kind) {
+    case 'num': return String(e.value);
+    case 'var': return e.name;
+    case 'bool': return String(e.value);
+    case 'call': return `${e.name}(${e.args.map(printExpr).join(', ')})`;
+    case 'not': return `¬${wrap(e.operand, precedence(e.operand) < p)}`;
+    case 'cond': return `if ${printExpr(e.cond)} then ${printExpr(e.then)} else ${printExpr(e.else)}`;
+    case 'compare':
+      return `${wrap(e.left, precedence(e.left) <= p)} ${SHOW[e.op] ?? e.op} ${wrap(e.right, precedence(e.right) <= p)}`;
+    case 'logic':
+    case 'binary': {
+      const rightAssoc = e.op === 'implies' || e.op === '^';
+      const l = wrap(e.left, rightAssoc ? precedence(e.left) <= p : precedence(e.left) < p);
+      const r = wrap(e.right, rightAssoc ? precedence(e.right) < p : precedence(e.right) <= p);
+      return `${l} ${SHOW[e.op] ?? e.op} ${r}`;
+    }
+  }
 }

@@ -1,0 +1,10 @@
+// Total correctness of GCD (Nikitchenko, theorems 1.3 and 1.4).
+// m and n are ghost variables: the initial values of M and N.
+//@ pre: M = m ∧ N = n ∧ m > 0 ∧ n > 0
+begin
+  //@ invariant: M > 0 ∧ N > 0 ∧ gcd(M, N) = gcd(m, n)
+  //@ variant: M + N
+  while ¬M = N do
+    if M > N then M := M - N else N := N - M
+end
+//@ post: M = gcd(m, n) ∧ N = gcd(m, n)

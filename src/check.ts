@@ -43,6 +43,15 @@ export function check(source: string): CheckResult {
   };
 }
 
+/** Variables of the program body that may be read before they are assigned (in order of first read). */
+export function programInputs(program: Program): string[] {
+  const inputs: string[] = [];
+  definitelyAssigned(program.body, new Set(), (e, defined) => {
+    for (const v of freeVars(e)) if (!defined.has(v) && !inputs.includes(v)) inputs.push(v);
+  });
+  return inputs;
+}
+
 function diag(severity: Diagnostic['severity'], code: string, message: string, span: SourceSpan): Diagnostic {
   return { severity, code, message, span };
 }
