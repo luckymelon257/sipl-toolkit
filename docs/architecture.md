@@ -33,7 +33,7 @@
 | [fixpoint/approx.ts](../src/fixpoint/approx.ts) | програма + ім'я + k → `Term[]`, `ApproxTable` | `f0 … fk` поділяють підтерми |
 | [fixpoint/report.ts](../src/fixpoint/report.ts) | таблиця + `--expect` → `ApproxReport` | дані для звітів |
 | [verify/wp.ts](../src/verify/wp.ts) | анотована програма → `VC[]` | `hypothesis → goal` з `derivation` |
-| [verify/verify.ts](../src/verify/verify.ts) | програма → `VerifyReport` | вердикт `refuted` / `unproven` / `checked-in-bounds` |
+| [verify/verify.ts](../src/verify/verify.ts) | програма → `VerifyReport` | вердикт `refuted` / `unproven` / `inconclusive` / `checked-in-bounds` / `checked-in-sample` |
 
 ## Рішення
 

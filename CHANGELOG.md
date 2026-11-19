@@ -2,6 +2,18 @@
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- `verify` no longer passes when part of the check tested nothing (vacuous conditions, no run from a state satisfying the precondition): the new verdict `inconclusive` exits with code 2. `--max-cases 0` is rejected.
+- Integer overflow in a run or an annotation makes the run inconclusive instead of refuting a correct program.
+- Ghost variables that occur only in the postcondition, invariants or variants now range over the box in runs.
+- Nested parenthesised conditions are parsed in linear time instead of exponential time.
+- Programs too long or nested too deeply for the call stack get diagnostic E102 or a clear CLI message instead of an internal error.
+
+### Changed
+- Node.js 22 or newer is required; CI runs lint, tests and the package build as separate stages.
+
 ## [0.1.0] - 2026-11-19
 
 ### Added
