@@ -37,7 +37,7 @@
     "dist",
     "grammar",
     "examples",
-    "docs",
+    "docs/*.md",
     "README.md",
     "CHANGELOG.md"
   ],
