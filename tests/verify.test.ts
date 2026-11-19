@@ -48,6 +48,8 @@ test('GCD: total correctness with the variant M + N (theorems 1.3-1.4)', () => {
   assert.equal(r.verdict, 'checked-in-bounds');
   assert.equal(r.total, true);
   assert.equal(r.vcs.length, 5);
+  // Every pair of positive initial values in [-3, 8] is run: 8 × 8 executions.
+  assert.deepEqual([r.runs.count, r.runs.mode], [64, 'exhaustive']);
 });
 
 test('every annotated example except the deliberately wrong ones verifies', () => {

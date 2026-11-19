@@ -152,7 +152,7 @@ export function verifyProgram(program: Program, opts: BoundsOptions & { maxRuns?
   }
 
   const vcs = generateVCs(program).map((vc) => ({ ...vc, result: checkVC(vc, { ...opts, range }) }));
-  const runs = runAll(program, loops, range, opts.maxRuns ?? 5_000);
+  const runs = runAll(program, loops, range, opts.maxCases ?? 250_000, opts.maxRuns ?? 5_000);
   const failed = vcs.filter((v) => v.result.status === 'refuted');
   const verdict = runs.violations.length > 0 ? 'refuted' : failed.length > 0 ? 'unproven' : 'checked-in-bounds';
   const total = verdict === 'checked-in-bounds' && loops.every((w) => w.variant);
@@ -164,17 +164,19 @@ export function verifyProgram(program: Program, opts: BoundsOptions & { maxRuns?
   return { diagnostics, vcs, runs, verdict, total, range, summary };
 }
 
-function runAll(program: Program, loops: While[], range: [number, number], maxRuns: number): VerifyReport['runs'] {
+/** Runs the program from the states of the box that satisfy pre (at most `maxRuns` runs). */
+function runAll(program: Program, loops: While[], range: [number, number], maxCases: number, maxRuns: number): VerifyReport['runs'] {
   const pre = program.pre;
   const vars = [...new Set([...programInputs(program), ...(pre ? freeVars(pre) : [])])].sort();
   const invariants = new Map(loops.map((w) => [w.id, w.invariant!]));
   const violations: RunViolation[] = [];
   let count = 0;
-  const it = box(vars, range, maxRuns);
+  const it = box(vars, range, maxCases);
   for (let r = it.next(); ; r = it.next()) {
     if (r.done) return { count, mode: r.value, violations };
     const input = r.value;
     if (pre && evalAssertion(pre, input) !== true) continue;
+    if (count === maxRuns) return { count, mode: 'sampled', violations };
     count++;
     const violation = runOne(program, input, invariants, loops.every((w) => w.variant));
     if (violation) violations.push(violation);
