@@ -43,5 +43,10 @@
   ],
   "engines": {
     "node": ">=20"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/luckymelon257/sipl-toolkit.git"
+  },
+  "homepage": "https://github.com/luckymelon257/sipl-toolkit#readme"
 }

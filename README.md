@@ -1,6 +1,6 @@
 # SIPL Correctness & Fixpoint Toolkit
 
-[![CI](https://github.com/OWNER/sipl-toolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/sipl-toolkit/actions/workflows/ci.yml)
+[![CI](https://github.com/luckymelon257/sipl-toolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/luckymelon257/sipl-toolkit/actions/workflows/ci.yml)
 
 Курсовий проєкт з дисципліни «Теорія програмування»: набір інструментів на Node.js/TypeScript для мови **SIPL** та її рекурсивного розширення **SIPL-R**. Інструменти:
 - будують семантичні терми програм;
@@ -25,7 +25,7 @@
 Потрібен Node.js 20 або новіший.
 
 ```bash
-git clone https://github.com/OWNER/sipl-toolkit.git
+git clone https://github.com/luckymelon257/sipl-toolkit.git
 cd sipl-toolkit
 npm ci
 npm run build
