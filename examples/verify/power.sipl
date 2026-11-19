@@ -1,0 +1,14 @@
+// x^y with a loop invariant and a variant (practicum, practical work 3)
+// x and y are ghost variables: the initial values of X and Y.
+//@ pre: X = x ∧ Y = y ∧ y ≥ 0
+begin
+  R := 1;
+  //@ invariant: R * X ^ Y = x ^ y ∧ Y ≥ 0 ∧ X = x
+  //@ variant: Y
+  while Y > 0 do
+  begin
+    R := R * X;
+    Y := Y - 1
+  end
+end
+//@ post: R = x ^ y

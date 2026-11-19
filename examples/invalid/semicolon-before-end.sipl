@@ -1,0 +1,4 @@
+// expect: E100 4:1
+begin
+  X := 1;
+end

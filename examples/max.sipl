@@ -1,0 +1,10 @@
+// maximum of two numbers; exercises if, skip, nested blocks and disjunction
+// run: A=3 B=9 -> M=9 C=0
+// run: A=7 B=7 -> M=7 C=1
+begin
+  if A > B ∨ A = B then
+    begin M := A; skip end
+  else
+    M := B;
+  if A = B then C := 1 else C := 0
+end

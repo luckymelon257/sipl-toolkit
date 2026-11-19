@@ -1,0 +1,7 @@
+// Greatest common divisor by Euclid's subtraction algorithm (Nikitchenko, Example 1.1)
+// run: M=8 N=16 -> M=8 N=8
+// run: M=21 N=6 -> M=3 N=3
+begin
+  while ¬M = N do
+    if M > N then M := M - N else N := N - M
+end

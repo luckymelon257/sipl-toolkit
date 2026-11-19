@@ -1,0 +1,31 @@
+/* Assertion language of '//@' annotations, used by the correctness assistant.
+ *
+ *   //@ pre: <Assertion>         precondition of the program
+ *   //@ post: <Assertion>        postcondition of the program
+ *   //@ invariant: <Assertion>   invariant of the next while loop
+ *   //@ variant: <Aexp>          variant (bound function) of the next while loop
+ *
+ * Variables that occur only in annotations are ghost (logical) variables:
+ * they are universally quantified and do not change during execution.
+ */
+
+Assertion  ::= Disj ( 'implies' Assertion )?                    /* right-associative */
+Disj       ::= Conj ( 'or' Conj )*
+Conj       ::= Neg ( 'and' Neg )*
+Neg        ::= 'not' Neg
+             | 'true' | 'false'
+             | Aexp CmpOp Aexp
+             | '(' Assertion ')'
+CmpOp      ::= '=' | '>' | '<' | '>=' | '<=' | '!='
+
+Aexp       ::= Term ( ( '+' | '-' ) Term )*
+Term       ::= Power ( ( '*' | 'div' | 'mod' ) Power )*
+Power      ::= Factor ( '^' Power )?                            /* right-associative */
+Factor     ::= Num | Var | '(' Aexp ')'
+             | 'if' Assertion 'then' Aexp 'else' Aexp
+             | ( 'gcd' | 'abs' ) '(' Aexp ( ',' Aexp )* ')'
+
+/* Aliases: 'and' = '∧', 'implies' = '→' = '=>', '>=' = '≥', '<=' = '≤', '!=' = '≠'.
+ * 'div' and 'mod' are floor division and its remainder; x div 0 and a negative
+ * exponent are undefined.
+ */

@@ -1,0 +1,7 @@
+// n! (Nikitchenko, Example 5.1)
+// run: K=5 -> R=120
+program
+  func f(N) = if N > 1 then N * f(N - 1) else 1
+begin
+  R := f(K)
+end

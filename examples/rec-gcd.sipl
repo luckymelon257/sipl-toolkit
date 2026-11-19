@@ -1,0 +1,7 @@
+// Greatest common divisor (Nikitchenko, Example 5.2)
+// run: A=12 B=18 -> G=6
+program
+  func f(N, M) = if N > M then f(N - M, M) else if N < M then f(N, M - N) else M
+begin
+  G := f(A, B)
+end

@@ -1,0 +1,2 @@
+// expect: E100 2:19
+begin X := (Y + 1 end

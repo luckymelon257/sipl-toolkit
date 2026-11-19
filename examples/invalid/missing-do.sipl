@@ -1,0 +1,2 @@
+// expect: E100 2:19
+begin while X > 0 X := X - 1 end

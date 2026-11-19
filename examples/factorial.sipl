@@ -1,0 +1,12 @@
+// N! with a loop
+// run: N=5 -> F=120
+// run: N=0 -> F=1
+begin
+  F := 1;
+  I := 1;
+  while N > I - 1 do
+  begin
+    F := F * I;
+    I := I + 1
+  end
+end

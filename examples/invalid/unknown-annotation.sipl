@@ -1,0 +1,3 @@
+// expect: E003 2:1
+//@ assert: X > 0
+begin skip end

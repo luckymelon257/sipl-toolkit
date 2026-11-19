@@ -1,0 +1,11 @@
+// 2 + 4 + ... + 2n using + and - (practicum, variant 7)
+// run: N=3 -> S=12
+begin
+  S := 0;
+  K := N;
+  while K > 0 do
+  begin
+    S := S + K + K;
+    K := K - 1
+  end
+end

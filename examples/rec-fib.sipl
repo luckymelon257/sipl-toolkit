@@ -1,0 +1,7 @@
+// Fibonacci numbers with two recursive calls
+// run: K=10 -> R=55
+program
+  func fib(N) = if N < 2 then N else fib(N - 1) + fib(N - 2)
+begin
+  R := fib(K)
+end

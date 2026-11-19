@@ -1,0 +1,35 @@
+/* SIPL-R — recursive extension of SIPL (Nikitchenko 2020, §5.7.3, tables 5.1-5.2;
+ * practicum 2024, practical work 7). Everything in sipl.ebnf is kept; the rules
+ * below are added or extended. Rule names follow table 5.1.
+ *
+ *   P   ::= ... | program dec1; ...; decn begin S end                    [P2]
+ *   a   ::= ... | if b then a1 else a2 | fc                              [A8, A9]
+ *   dec ::= func fn = a | func fn(x1, ..., xn) = a                       [DF1, DF2]
+ *   fn  ::= x                                                            [NF]
+ *   fc  ::= fn | fn(a1, ..., an)                                         [CF1, CF2]
+ *
+ * The comparison '<' (operation less) is added because the recursive examples
+ * of the course use it (x ÷ y in practical work 7, gcd in Example 5.2).
+ */
+
+Program    ::= 'begin' Stms 'end'                               /* P1 */
+             | 'program' Decls? 'begin' Stms 'end'              /* P2 */
+
+Decls      ::= Decl ( ';' Decl )*                               /* LDF1-LDF3 */
+Decl       ::= 'func' FnName ( '(' Params ')' )? '=' Aexp       /* DF1, DF2 */
+Params     ::= Var ( ',' Var )*                                 /* LFP1, LFP2 */
+FnName     ::= Var                                              /* NF */
+
+Factor     ::= Num | Var | '(' Aexp ')'
+             | 'if' Bexp 'then' Aexp 'else' Aexp                /* A8: the else part extends to the right */
+             | FnName '(' Args ')'                              /* CF2 */
+Args       ::= Aexp ( ',' Aexp )*                               /* LAP1, LAP2 */
+
+Neg        ::= 'not' Neg
+             | Aexp ( '=' | '>' | '<' ) Aexp
+             | '(' Bexp ')'
+
+/* A bare name declared as a function is a call without arguments (CF1),
+ * so function names cannot be used as variables or assigned to.
+ * Function bodies are expressions: functions do not change the state.
+ */

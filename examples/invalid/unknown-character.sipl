@@ -1,0 +1,2 @@
+// expect: E001 2:14
+begin X := 1 # end

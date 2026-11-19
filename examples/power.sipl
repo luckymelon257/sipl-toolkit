@@ -1,0 +1,11 @@
+// x^y using +, -, * (practicum, practical work 1)
+// run: X=5 Y=2 -> R=25
+// run: X=2 Y=10 -> R=1024
+begin
+  R := 1;
+  while Y > 0 do
+  begin
+    R := R * X;
+    Y := Y - 1
+  end
+end

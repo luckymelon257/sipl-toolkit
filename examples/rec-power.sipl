@@ -1,0 +1,9 @@
+// x^y recursively, with a helper function and a zero-argument function
+// run: A=3 B=4 -> R=81
+program
+  func one = 1;
+  func sq(X) = X * X;
+  func p(X, Y) = if Y = 0 then one else if Y > 1 then sq(X) * p(X, Y - 2) else X
+begin
+  R := p(A, B)
+end

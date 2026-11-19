@@ -1,0 +1,15 @@
+// n-th Fibonacci number, F1 = F2 = 1 (practicum, variant 11)
+// run: N=3 -> F=2
+// run: N=10 -> F=55
+begin
+  F := 1;
+  G := 0;
+  K := 1;
+  while N > K do
+  begin
+    T := F + G;
+    G := F;
+    F := T;
+    K := K + 1
+  end
+end

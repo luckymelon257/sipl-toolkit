@@ -1,0 +1,55 @@
+/* SIPL — base language of the course "Теорія програмування".
+ * Notation: W3C XML EBNF (https://www.w3.org/TR/xml/#sec-notation).
+ *
+ * Course BNF (Nikitchenko 2020, table 1.2; practicum 2024, p. 8). Rule names in brackets.
+ *
+ *   P ::= begin S end                                                     [NP1]
+ *   S ::= x := a | S1 ; S2 | if b then S1 else S2 | while b do S
+ *       | begin S end | skip                                              [NS1-NS6]
+ *   a ::= n | x | a1 + a2 | a1 - a2 | a1 * a2 | ( a )                     [NA1-NA6]
+ *   b ::= a1 = a2 | a1 > a2 | b1 ∨ b2 | ¬ b | ( b )                       [NB1-NB5]
+ *   x ::= ... M | N | ...                                                 [NV]
+ *   n ::= ... -1 | 0 | 1 | 2 | ...                                        [NN]
+ *
+ * The course BNF is ambiguous. It is made unambiguous by the conventions of
+ * Nikitchenko 2020, p. 10: all binary operations are left-associative and the
+ * priority, from highest to lowest, is
+ *   *  ;  + -  ;  = >  ;  ¬  ;  ∨  ;  :=  ;  while  ;  if  ;  ;
+ * The stratified grammar below encodes exactly these conventions and generates
+ * the same language as the course BNF.
+ */
+
+Program    ::= 'begin' Stms 'end'                       /* NP1 */
+
+Stms       ::= Stm ( ';' Stm )*                         /* NS2, left-associative */
+Stm        ::= Var ':=' Aexp                            /* NS1 */
+             | 'if' Bexp 'then' Stm 'else' Stm          /* NS3 */
+             | 'while' Bexp 'do' Stm                    /* NS4 */
+             | 'begin' Stms 'end'                       /* NS5 */
+             | 'skip'                                   /* NS6 */
+
+Aexp       ::= Term ( ( '+' | '-' ) Term )*             /* NA3, NA4 */
+Term       ::= Factor ( '*' Factor )*                   /* NA5 */
+Factor     ::= Num                                      /* NA1 */
+             | Var                                      /* NA2 */
+             | '(' Aexp ')'                             /* NA6 */
+
+Bexp       ::= Neg ( 'or' Neg )*                        /* NB3 */
+Neg        ::= 'not' Neg                                /* NB4 */
+             | Aexp ( '=' | '>' ) Aexp                  /* NB1, NB2 */
+             | '(' Bexp ')'                             /* NB5 */
+
+/* ---- lexis ---- */
+
+Var        ::= Letter ( Letter | Digit | '_' )*         /* NV; case-sensitive, not a keyword */
+Num        ::= '-'? Digit+                              /* NN; the sign is part of the literal */
+Letter     ::= [A-Za-z]
+Digit      ::= [0-9]
+
+/* Keywords: begin end if then else while do skip or not.
+ * Token aliases (as printed in the textbook):
+ *   'or'  = '∨'      'not' = '¬'
+ *   '-'   = '–' (en dash) = '−' (minus sign)      '*' = '∗' = '×'
+ * Whitespace separates tokens; '//' starts a comment to the end of the line.
+ * A '//@' comment is an annotation (see assertions.ebnf).
+ */

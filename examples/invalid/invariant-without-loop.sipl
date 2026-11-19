@@ -1,0 +1,3 @@
+// expect: E005 3:16
+begin X := 1 end
+//@ invariant: X = 1

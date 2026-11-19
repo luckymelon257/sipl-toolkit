@@ -1,0 +1,11 @@
+// x * y by repeated addition
+// run: X=4 Y=3 -> R=12
+begin
+  R := 0;
+  K := Y;
+  while K > 0 do
+  begin
+    R := R + X;
+    K := K - 1
+  end
+end

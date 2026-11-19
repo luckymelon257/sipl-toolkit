@@ -1,0 +1,8 @@
+// floor(sqrt(n)) using *, +, - (practicum, variant 16)
+// run: N=7 -> R=2
+// run: N=16 -> R=4
+begin
+  R := 0;
+  while ¬(R + 1) * (R + 1) > N do
+    R := R + 1
+end

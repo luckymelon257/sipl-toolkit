@@ -1,0 +1,2 @@
+// expect: E100 2:28
+begin if X > 0 then Y := 1 end

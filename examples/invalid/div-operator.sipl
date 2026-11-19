@@ -1,0 +1,2 @@
+// expect: E002 2:14
+begin X := Y div 2 end

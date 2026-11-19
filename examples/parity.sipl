@@ -1,0 +1,12 @@
+// E = 1 if n is even, 0 otherwise, without div and mod (practicum, variant 12)
+// run: N=5 -> E=0
+// run: N=8 -> E=1
+begin
+  E := 1;
+  K := N;
+  while K > 0 do
+  begin
+    E := 1 - E;
+    K := K - 1
+  end
+end

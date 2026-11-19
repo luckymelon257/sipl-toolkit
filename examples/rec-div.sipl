@@ -1,0 +1,8 @@
+// Integer quotient x ÷ y as a recursive function (practicum, practical work 7)
+// run: A=7 B=4 -> Q=1
+// run: A=17 B=5 -> Q=3
+program
+  func f(X, Y) = if X < Y then 0 else f(X - Y, Y) + 1
+begin
+  Q := f(A, B)
+end
