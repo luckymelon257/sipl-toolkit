@@ -22,7 +22,7 @@
 
 ## Встановлення
 
-Потрібен Node.js 20 або новіший.
+Потрібен Node.js 22 або новіший (на цій версії проєкт перевіряє CI).
 
 ```bash
 git clone https://github.com/luckymelon257/sipl-toolkit.git
