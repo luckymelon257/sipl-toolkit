@@ -1,0 +1,63 @@
+# Командний рядок `sipl`
+
+```text
+sipl check  <file>
+sipl run    <file> [-s X=5 ...] [--trace] [--max-iterations N]
+sipl term   <file> [--explain]
+sipl approx <file> [-f NAME] [-k N] [-s X=7,Y=4] [--explain]
+                   [--grid X=0..9,Y=1..5] [--expect EXPR] [--where COND] [--html FILE]
+sipl verify <file> [--range LO..HI] [--max-cases N]
+```
+
+`<file>` може бути `-`; тоді програма читається зі стандартного входу. Кожна команда приймає `--json`.
+
+## Команди
+
+| Команда | Що робить |
+|---------|-----------|
+| `check` | Розбір і статичні перевірки. Виводить діалект (`SIPL` або `SIPL-R`) і вхідні змінні: ті, що можуть читатися до присвоєння. |
+| `run` | Застосовує `sem_P(P)` до початкового стану. `-s` можна повторювати і перелічувати через кому. `--trace` друкує застосовані формули AF_*. |
+| `term` | Семантичний терм програми і `φ` кожної функції. `--explain` друкує покрокову побудову за правилами NS_*. |
+| `approx` | Апроксимації `f0 … fk` функції `-f` (за замовчуванням єдиної в програмі, `k = 3`); подробиці нижче. |
+| `verify` | Умови коректності за анотаціями `//@`, їх перевірка на кубі станів і прогони програми ([verification.md](verification.md)). |
+
+Режими `approx`:
+- з `-s` — значення кожної апроксимації на заданому стані, а з `--explain` ще й кроки обчислення `fk`;
+- з `--grid` — таблиця, перевірки та, за потреби, HTML-звіт ([fixpoint.md](fixpoint.md)).
+
+## Коди завершення
+
+| Код | Значення |
+|----:|----------|
+| 0 | успіх |
+| 1 | синтаксична або статична помилка (для `verify` ще V001/V002) |
+| 2 | результат невизначений (`run`); невідповідність або немонотонність (`approx`); умова не виконується чи прогін порушує анотацію (`verify`) |
+| 64 | неправильний виклик: невідома команда чи опція, погане значення опції |
+| 66 | вхідний файл неможливо прочитати |
+
+## JSON
+
+З `--json` команда друкує в stdout один JSON-документ (навіть у разі помилки, крім кодів 64 і 66). Спільні поля:
+
+```json
+{
+  "schemaVersion": 1,
+  "command": "run",
+  "ok": true,
+  "diagnostics": []
+}
+```
+
+`diagnostics` — масив `{ severity, code, message, span: { start: { line, column, offset }, end: { … } } }`.
+
+Поля окремих команд:
+
+| Команда | Поля |
+|---------|------|
+| `check` | `dialect`, `inputs` |
+| `run` | `result: { status: "defined" \| "undefined", input, state?, undefined?: { reason, message }, steps? }` |
+| `term` | `term` (рядок), `functions` (`{ ім'я: φ }`), `derivation?` (`[{ rule, nodeId, lhs, rhs }]`) |
+| `approx` | `function`, `k`, `terms` (рядки `f0…fk`), `values?` (`[{ k, value \| null, undefined? }]`), `report?` (`{ rows, checks, definedCount }`) |
+| `verify` | `report: { verdict, total, range, summary, vcs: [{ id, kind, title, loopId?, hypothesis, goal, derivation, result }], runs: { count, mode, violations } }` |
+
+Поле `schemaVersion` змінюється лише тоді, коли зміна несумісна з попереднім форматом.
