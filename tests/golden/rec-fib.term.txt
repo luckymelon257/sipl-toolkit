@@ -1,0 +1,2 @@
+AS^R(S^[N](fib, K⇒))
+φ(fib) = IF(S^2(less, N⇒, 2), N⇒, S^2(add, S^[N](fib, S^2(sub, N⇒, 1)), S^[N](fib, S^2(sub, N⇒, 2))))

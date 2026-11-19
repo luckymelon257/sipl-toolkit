@@ -1,0 +1,1 @@
+AS^F(1) · AS^G(0) · AS^K(1) · WH(S^2(gr, N⇒, K⇒), AS^T(S^2(add, F⇒, G⇒)) · AS^G(F⇒) · AS^F(T⇒) · AS^K(S^2(add, K⇒, 1)))

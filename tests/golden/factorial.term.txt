@@ -1,0 +1,1 @@
+AS^F(1) · AS^I(1) · WH(S^2(gr, N⇒, S^2(sub, I⇒, 1)), AS^F(S^2(mult, F⇒, I⇒)) · AS^I(S^2(add, I⇒, 1)))

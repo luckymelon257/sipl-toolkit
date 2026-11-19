@@ -1,0 +1,4 @@
+AS^R(S^[X,Y](p, A⇒, B⇒))
+φ(one) = 1
+φ(sq) = S^2(mult, X⇒, X⇒)
+φ(p) = IF(S^2(eq, Y⇒, 0), one, IF(S^2(gr, Y⇒, 1), S^2(mult, S^[X](sq, X⇒), S^[X,Y](p, X⇒, S^2(sub, Y⇒, 2))), X⇒))

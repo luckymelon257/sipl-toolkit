@@ -1,0 +1,2 @@
+AS^R(S^[N](f, K⇒))
+φ(f) = IF(S^2(gr, N⇒, 1), S^2(mult, N⇒, S^[N](f, S^2(sub, N⇒, 1))), 1)

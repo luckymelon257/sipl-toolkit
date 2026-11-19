@@ -1,0 +1,1 @@
+AS^R(0) · AS^K(Y⇒) · WH(S^2(gr, K⇒, 0), AS^R(S^2(add, R⇒, X⇒)) · AS^K(S^2(sub, K⇒, 1)))

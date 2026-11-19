@@ -1,0 +1,2 @@
+AS^G(S^[N,M](f, A⇒, B⇒))
+φ(f) = IF(S^2(gr, N⇒, M⇒), S^[N,M](f, S^2(sub, N⇒, M⇒), M⇒), IF(S^2(less, N⇒, M⇒), S^[N,M](f, N⇒, S^2(sub, M⇒, N⇒)), M⇒))

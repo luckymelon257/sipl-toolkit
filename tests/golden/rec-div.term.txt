@@ -1,0 +1,2 @@
+AS^Q(S^[X,Y](f, A⇒, B⇒))
+φ(f) = IF(S^2(less, X⇒, Y⇒), 0, S^2(add, S^[X,Y](f, S^2(sub, X⇒, Y⇒), Y⇒), 1))

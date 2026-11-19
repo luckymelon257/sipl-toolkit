@@ -1,0 +1,1 @@
+AS^R(0) · WH(S^1(neg, S^2(gr, S^2(mult, S^2(add, R⇒, 1), S^2(add, R⇒, 1)), N⇒)), AS^R(S^2(add, R⇒, 1)))

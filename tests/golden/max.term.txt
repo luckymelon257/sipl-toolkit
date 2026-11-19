@@ -1,0 +1,1 @@
+IF(S^2(or, S^2(gr, A⇒, B⇒), S^2(eq, A⇒, B⇒)), AS^M(A⇒) · id, AS^M(B⇒)) · IF(S^2(eq, A⇒, B⇒), AS^C(1), AS^C(0))
