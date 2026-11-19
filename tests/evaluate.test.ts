@@ -52,8 +52,19 @@ test('runaway recursion is reported, not thrown', () => {
   const p = parseProgram('program func f(X) = f(X + 1) begin Y := f(0) end');
   const r = runProgram(p, {});
   assert.equal(r.undef?.reason, 'call-depth');
+  assert.match(r.undef!.message, /deeper than 500 calls/);
   const deep = runProgram(p, {}, { maxCallDepth: 1_000_000 });
   assert.equal(deep.status, 'undefined');
+  assert.equal(deep.undef?.reason, 'stack-limit');
+  assert.doesNotMatch(deep.undef!.message, /not terminate/);
+});
+
+test('recursion within the default depth budget never exhausts the stack', () => {
+  assert.deepEqual(runProgram(prog('rec-div.sipl'), { A: 490, B: 1 }).state?.Q, 490);
+  assert.equal(runProgram(prog('rec-factorial.sipl'), { K: 15 }).status, 'defined');
+  assert.equal(runProgram(prog('rec-gcd.sipl'), { A: 490, B: 1 }).state?.G, 1);
+  assert.equal(runProgram(prog('rec-power.sipl'), { A: 1, B: 990 }).state?.R, 1);
+  const deep = runProgram(prog('rec-div.sipl'), { A: 900, B: 1 });
   assert.equal(deep.undef?.reason, 'call-depth');
 });
 

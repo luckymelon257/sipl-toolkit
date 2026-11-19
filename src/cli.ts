@@ -4,9 +4,10 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import type { Program } from './ast.js';
+import { freeVars } from './ast.js';
 import { printExpr } from './assertion.js';
 import { check } from './check.js';
-import { approximationTerms, applyApproximation, printApproximation } from './fixpoint/approx.js';
+import { MAX_APPROXIMATION, approximationTerms, applyApproximation, printApproximation } from './fixpoint/approx.js';
 import { renderHtml, renderTable } from './fixpoint/render.js';
 import { gridStates, testApproximations } from './fixpoint/report.js';
 import { parseAssertion } from './parser.js';
@@ -17,7 +18,7 @@ import { Diagnostic, SiplError } from './span.js';
 import { formatState, parseAssignments } from './values.js';
 import { verifyProgram } from './verify/verify.js';
 
-const EXIT = { ok: 0, invalid: 1, failed: 2, usage: 64, noInput: 66 } as const;
+const EXIT = { ok: 0, invalid: 1, failed: 2, usage: 64, noInput: 66, internal: 70, cannotWrite: 73 } as const;
 
 const HELP = `SIPL toolkit: parser, semantic terms, least-fixpoint approximations and a correctness assistant.
 
@@ -34,7 +35,7 @@ Usage:
 
 Options:
   -s, --set NAME=VALUE[,...]   initial state (repeatable)
-  --max-iterations N           loop iteration budget for run (default 100000)
+  --max-iterations N           loop iteration budget (run: 100000, verify runs: 10000)
   --max-cases N                states examined per verification condition (default 250000)
   --json                       machine-readable output (schemaVersion 1)
   -h, --help                   this help
@@ -42,10 +43,13 @@ Options:
 
 <file> may be '-' to read standard input.
 Exit codes: 0 success; 1 syntax or static error; 2 undefined result, refuted or failed check;
-64 usage error; 66 input file cannot be read.`;
+64 usage error; 66 input file cannot be read; 70 internal error; 73 output file cannot be written.`;
 
 class UsageError extends Error {}
 class InputError extends Error {}
+class OutputError extends Error {}
+/** The test setup leaves nothing to check: reported as a failed check (exit 2). */
+class EmptyCheckError extends Error {}
 
 interface Out {
   json: boolean;
@@ -205,11 +209,38 @@ function cmdApprox(out: Out, v: Values): number {
   if (!name) throw new UsageError(`the program declares several functions (${names.join(', ')}); choose one with --function`);
   if (!names.includes(name)) throw new UsageError(`no function ${name}; declared: ${names.join(', ')}`);
 
+  if (k > MAX_APPROXIMATION) throw new UsageError(`-k must be at most ${MAX_APPROXIMATION}`);
+
+  // Every variable the function reads must get a value, or the whole table would be ⊥ for a trivial reason.
+  const fn = program.functions.find((f) => f.name === name)!;
+  const needed = [...new Set([...fn.params, ...freeVars(fn.body)])];
+  const given = new Set(grid ? Object.keys(grid[0]) : st ? Object.keys(st) : needed);
+  const missing = needed.filter((x) => !given.has(x));
+  if (missing.length) {
+    throw new UsageError(`${name} reads ${missing.join(', ')}; give ${missing.length > 1 ? 'them' : 'it'} values in ${grid ? '--grid' : '-s'}`);
+  }
+  for (const [flag, e] of [['--expect', expect], ['--where', where]] as const) {
+    const unknown = e ? freeVars(e).filter((x) => !given.has(x)) : [];
+    if (unknown.length) throw new UsageError(`${flag} uses ${unknown.join(', ')}, which ${grid ? '--grid' : '-s'} does not define`);
+  }
+
   const chain = approximationTerms(program, name, k);
   const terms = chain.map((_, i) => printApproximation(chain, i, name));
-  const values = st ? chain.map((_, i) => applyApproximation(program, name, i, st)) : undefined;
+  const values = st
+    ? chain.map((_, i) => applyApproximation(program, name, i, st, { record: Boolean(v.explain) && i === k }))
+    : undefined;
   const report = grid ? testApproximations(program, name, { k, states: grid, expect, where, expectText: v.expect }) : undefined;
-  if (report && v.html) writeFileSync(v.html, renderHtml(report));
+  if (report && report.rows.length === 0) throw new EmptyCheckError('no test states left after --where');
+  if (report && expect && !report.rows.some((r) => r.firstDefined !== null && r.expected !== null)) {
+    throw new EmptyCheckError('nothing to compare: no test state has both a defined approximation and a defined --expect value');
+  }
+  if (report && v.html) {
+    try {
+      writeFileSync(v.html, renderHtml(report));
+    } catch (e) {
+      throw new OutputError(`cannot write ${v.html}: ${(e as Error).message}`);
+    }
+  }
   const ok = !report || (report.checks.monotone && report.checks.mismatches.length === 0);
 
   if (out.json) {
@@ -242,10 +273,12 @@ function cmdVerify(out: Out, v: Values): number {
     range = [Number(m[1]), Number(m[2])];
   }
   const maxCases = intOption(v['max-cases'], '--max-cases');
+  const maxIterations = intOption(v['max-iterations'], '--max-iterations');
   const loaded = load(out, 'verify');
   if (!loaded) return EXIT.invalid;
-  const r = verifyProgram(loaded.program, { range, maxCases });
-  const ok = r.verdict === 'checked-in-bounds';
+  const r = verifyProgram(loaded.program, { range, maxCases, maxIterations });
+  const ok = r.verdict.startsWith('checked');
+  const errors = r.diagnostics.filter((d) => d.severity === 'error');
   const vcs = r.vcs.map((vc) => ({
     id: vc.id, kind: vc.kind, title: vc.title, loopId: vc.loop?.id,
     hypothesis: printExpr(vc.hypothesis), goal: printExpr(vc.goal), derivation: vc.derivation, result: vc.result,
@@ -255,12 +288,10 @@ function cmdVerify(out: Out, v: Values): number {
       command: 'verify', ok, diagnostics: r.diagnostics,
       report: { verdict: r.verdict, total: r.total, range: r.range, summary: r.summary, vcs, runs: r.runs },
     });
-    return ok ? EXIT.ok : r.diagnostics.length ? EXIT.invalid : EXIT.failed;
+    return ok ? EXIT.ok : errors.length ? EXIT.invalid : EXIT.failed;
   }
-  if (r.diagnostics.length) {
-    printDiagnostics(loaded.source, r.diagnostics, out.file);
-    return EXIT.invalid;
-  }
+  printDiagnostics(loaded.source, r.diagnostics, out.file);
+  if (errors.length) return EXIT.invalid;
   for (const vc of vcs) {
     console.log(`VC ${vc.id} [${vc.kind}] ${vc.title}`);
     console.log(`  ${vc.hypothesis}  →  ${vc.goal}`);
@@ -274,7 +305,8 @@ function cmdVerify(out: Out, v: Values): number {
     }
     console.log('');
   }
-  console.log(`Runs: ${r.runs.count} execution(s) from states satisfying the precondition (${r.runs.mode})`);
+  console.log(`Runs: ${r.runs.count} execution(s) from states satisfying the precondition (${r.runs.mode})` +
+    (r.runs.inconclusive ? `, ${r.runs.inconclusive} did not finish within the iteration budget` : ''));
   for (const viol of r.runs.violations) console.log(`  ${viol.kind} violated from ${formatState(viol.input)}: ${viol.message}`);
   console.log(`\n${r.summary}`);
   return ok ? EXIT.ok : EXIT.failed;
@@ -305,10 +337,22 @@ function parse(argv: string[]) {
   });
 }
 
+const VALUE_OPTIONS = new Set(['--set', '-s', '-f', '--function', '-k', '--grid', '--expect', '--where', '--html', '--range', '--max-iterations', '--max-cases']);
+
+/** `--range -3..8`: parseArgs would read `-3..8` as an option, so glue such values to their option. */
+function glueNegativeValues(argv: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < argv.length; i++) {
+    if (VALUE_OPTIONS.has(argv[i]) && /^-\d/.test(argv[i + 1] ?? '')) out.push(`${argv[i].startsWith('--') ? argv[i] + '=' : argv[i]}${argv[++i]}`);
+    else out.push(argv[i]);
+  }
+  return out;
+}
+
 export function main(argv: string[]): number {
   let parsed: ReturnType<typeof parse>;
   try {
-    parsed = parse(argv);
+    parsed = parse(glueNegativeValues(argv));
   } catch (e) {
     console.error(`sipl: ${(e as Error).message}\nRun 'sipl --help' for usage.`);
     return EXIT.usage;
@@ -341,7 +385,16 @@ export function main(argv: string[]): number {
       console.error(`sipl: ${e.message}`);
       return EXIT.noInput;
     }
-    throw e;
+    if (e instanceof OutputError) {
+      console.error(`sipl: ${e.message}`);
+      return EXIT.cannotWrite;
+    }
+    if (e instanceof EmptyCheckError) {
+      console.error(`sipl: ${e.message}`);
+      return EXIT.failed;
+    }
+    console.error(`sipl: internal error: ${(e as Error).message}`);
+    return EXIT.internal;
   }
 }
 

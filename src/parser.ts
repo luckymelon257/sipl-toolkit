@@ -10,6 +10,9 @@ const COMPARE_OPS: Partial<Record<TokenKind, CompareOp>> = {
   '=': '=', '>': '>', '<': '<', '>=': '>=', '<=': '<=', '!=': '!=',
 };
 
+/** Functions of the assertion language and their arity. */
+const ASSERTION_FUNCTIONS: Record<string, number> = { gcd: 2, abs: 1 };
+
 function describe(tok: Token): string {
   return tok.kind === 'eof' ? 'end of input' : `'${tok.text}'`;
 }
@@ -214,6 +217,15 @@ class Parser {
         }
         this.expect(')', "',' or ')'");
         if (this.mode === 'program') this.extended = true;
+        else if (ASSERTION_FUNCTIONS[tok.text] !== args.length) {
+          throw new SiplError(
+            'E006',
+            ASSERTION_FUNCTIONS[tok.text] === undefined
+              ? `unknown function ${tok.text} in an assertion; available: gcd(a, b), abs(a)`
+              : `${tok.text} expects ${ASSERTION_FUNCTIONS[tok.text]} argument(s), got ${args.length}`,
+            { start, end: this.prevEnd },
+          );
+        }
         return this.node(start, { kind: 'call', name: tok.text, args }) as Expr;
       }
       case '(': {

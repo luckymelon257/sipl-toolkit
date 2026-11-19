@@ -33,7 +33,7 @@ export type VCResult =
     };
 
 export interface RunViolation {
-  kind: 'invariant' | 'post' | 'non-termination' | 'undefined';
+  kind: 'invariant' | 'variant' | 'post' | 'undefined';
   input: State;
   /** State at the violation (the loop head, or the final state). */
   state: State;
@@ -42,16 +42,28 @@ export interface RunViolation {
   message: string;
 }
 
+export interface RunsReport {
+  /** Executions started from states of the box that satisfy pre. */
+  count: number;
+  /** exhaustive: every such state; sampled: the box was sampled; truncated: stopped at the run limit. */
+  mode: 'exhaustive' | 'sampled' | 'truncated';
+  violations: RunViolation[];
+  /** Executions that did not finish within the iteration budget (neither a pass nor a violation). */
+  inconclusive: number;
+}
+
 export interface VerifyReport {
   diagnostics: Diagnostic[];
   vcs: (VC & { result: VCResult })[];
-  runs: { count: number; mode: 'exhaustive' | 'sampled'; violations: RunViolation[] };
+  runs: RunsReport;
   /**
    * refuted: a real execution from a state satisfying pre violates an annotation;
    * unproven: some condition fails (annotations too weak or missing) though no run in bounds fails;
-   * checked-in-bounds: every condition holds for all states in the box — evidence, not a proof.
+   * checked-in-bounds: every condition holds for every state of the box and every run passed;
+   * checked-in-sample: nothing failed, but some condition or the runs covered only a sample of the box.
+   * Both "checked" verdicts are evidence, not a proof.
    */
-  verdict: 'refuted' | 'unproven' | 'checked-in-bounds';
+  verdict: 'refuted' | 'unproven' | 'checked-in-bounds' | 'checked-in-sample';
   /** Every loop has a checked variant, so termination is covered as well (total correctness). */
   total: boolean;
   range: [number, number];
@@ -126,7 +138,9 @@ class StopRun extends Error {
  * on a bounded box of states (with counterexamples), and runs the program from every state of the box that
  * satisfies the precondition, checking invariants at each loop head and the postcondition at the end.
  */
-export function verifyProgram(program: Program, opts: BoundsOptions & { maxRuns?: number } = {}): VerifyReport {
+export function verifyProgram(
+  program: Program, opts: BoundsOptions & { maxRuns?: number; maxIterations?: number } = {},
+): VerifyReport {
   const range = opts.range ?? [-3, 8];
   const loops = [...walk(program.body)].filter((n): n is While => n.kind === 'while');
   const diagnostics: Diagnostic[] = [];
@@ -146,64 +160,84 @@ export function verifyProgram(program: Program, opts: BoundsOptions & { maxRuns?
   }
   if (diagnostics.length > 0) {
     return {
-      diagnostics, vcs: [], runs: { count: 0, mode: 'exhaustive', violations: [] }, verdict: 'unproven', total: false, range,
+      diagnostics, vcs: [], runs: { count: 0, mode: 'exhaustive', violations: [], inconclusive: 0 },
+      verdict: 'unproven', total: false, range,
       summary: 'nothing was checked: ' + diagnostics.map((d) => d.message).join('; '),
     };
   }
 
-  const vcs = generateVCs(program).map((vc) => ({ ...vc, result: checkVC(vc, { ...opts, range }) }));
-  const runs = runAll(program, loops, range, opts.maxCases ?? 250_000, opts.maxRuns ?? 5_000);
+  const vcs = generateVCs(program, diagnostics).map((vc) => ({ ...vc, result: checkVC(vc, { ...opts, range }) }));
+  const runs = runAll(program, loops, range, opts.maxCases ?? 250_000, opts.maxRuns ?? 5_000, opts.maxIterations ?? 10_000);
   const failed = vcs.filter((v) => v.result.status === 'refuted');
-  const verdict = runs.violations.length > 0 ? 'refuted' : failed.length > 0 ? 'unproven' : 'checked-in-bounds';
-  const total = verdict === 'checked-in-bounds' && loops.every((w) => w.variant);
+  const complete = runs.mode === 'exhaustive' && vcs.every((v) => v.result.status !== 'checked' || v.result.mode === 'exhaustive');
+  const verdict = runs.violations.length > 0 ? 'refuted'
+    : failed.length > 0 ? 'unproven'
+    : complete ? 'checked-in-bounds' : 'checked-in-sample';
+  const total = verdict.startsWith('checked') && loops.every((w) => w.variant) && !diagnostics.some((d) => d.code === 'V003');
+  const notes: string[] = [];
+  const sampled = vcs.filter((v) => v.result.status === 'checked' && v.result.mode === 'sampled').map((v) => v.id);
+  if (sampled.length > 0) notes.push(`condition(s) ${sampled.join(', ')} were checked on a random sample of the box only (raise --max-cases to check every state).`);
+  if (runs.mode === 'truncated') notes.push(`runs stopped at ${runs.count}; not every state satisfying the precondition was run.`);
+  if (runs.mode === 'sampled') notes.push('runs started from a random sample of the box only.');
+  if (runs.inconclusive > 0) notes.push(`${runs.inconclusive} run(s) did not finish within the iteration budget (raise --max-iterations); they count neither as passed nor as failed.`);
   const vacuous = vcs.filter((v) => v.result.status === 'checked' && v.result.relevant === 0).map((v) => v.id);
-  let summary = summarize(verdict, total, failed, runs, range);
-  if (vacuous.length > 0) {
-    summary += ` Note: condition(s) ${vacuous.join(', ')} never had a true hypothesis in the box, so they were not really tested; widen the range.`;
-  }
+  if (vacuous.length > 0) notes.push(`condition(s) ${vacuous.join(', ')} never had a true hypothesis in the box, so they were not really tested; widen the range.`);
+  const summary = [summarize(verdict, total, failed, runs, range), ...notes.map((n) => `Note: ${n}`)].join(' ');
   return { diagnostics, vcs, runs, verdict, total, range, summary };
 }
 
 /** Runs the program from the states of the box that satisfy pre (at most `maxRuns` runs). */
-function runAll(program: Program, loops: While[], range: [number, number], maxCases: number, maxRuns: number): VerifyReport['runs'] {
+function runAll(
+  program: Program, loops: While[], range: [number, number], maxCases: number, maxRuns: number, maxIterations: number,
+): RunsReport {
   const pre = program.pre;
   const vars = [...new Set([...programInputs(program), ...(pre ? freeVars(pre) : [])])].sort();
-  const invariants = new Map(loops.map((w) => [w.id, w.invariant!]));
-  const violations: RunViolation[] = [];
-  let count = 0;
+  const byId = new Map(loops.map((w) => [w.id, w]));
+  const report: RunsReport = { count: 0, mode: 'exhaustive', violations: [], inconclusive: 0 };
   const it = box(vars, range, maxCases);
   for (let r = it.next(); ; r = it.next()) {
-    if (r.done) return { count, mode: r.value, violations };
+    if (r.done) return { ...report, mode: r.value };
     const input = r.value;
     if (pre && evalAssertion(pre, input) !== true) continue;
-    if (count === maxRuns) return { count, mode: 'sampled', violations };
-    count++;
-    const violation = runOne(program, input, invariants, loops.every((w) => w.variant));
-    if (violation) violations.push(violation);
-    if (violations.length >= 5) return { count, mode: 'sampled', violations };
+    if (report.count === maxRuns) return { ...report, mode: 'truncated' };
+    report.count++;
+    const outcome = runOne(program, input, byId, maxIterations);
+    if (outcome === 'inconclusive') report.inconclusive++;
+    else if (outcome) report.violations.push(outcome);
+    if (report.violations.length >= 5) return { ...report, mode: 'truncated' };
   }
 }
 
-function runOne(program: Program, input: State, invariants: Map<number, Program['pre'] & object>, totalClaimed: boolean): RunViolation | undefined {
+function runOne(program: Program, input: State, loops: Map<number, While>, maxIterations: number): RunViolation | 'inconclusive' | undefined {
+  const lastVariant = new Map<number, number>();
+  const stop = (v: RunViolation) => {
+    throw new StopRun(v);
+  };
   try {
     const run = runProgram(program, input, {
-      maxIterations: 10_000,
+      maxIterations,
       onLoopHead: (loopId, iteration, state) => {
-        const inv = invariants.get(loopId);
-        if (inv && evalAssertion(inv, state) !== true) {
-          throw new StopRun({
-            kind: 'invariant', input, state, loopId, iteration,
-            message: `invariant ${printExpr(inv)} does not hold before iteration ${iteration} in ${formatState(state)}`,
-          });
+        const w = loops.get(loopId);
+        if (!w) return;
+        const at = { input, state, loopId, iteration };
+        if (evalAssertion(w.invariant!, state) !== true) {
+          stop({ kind: 'invariant', ...at, message: `invariant ${printExpr(w.invariant!)} does not hold before iteration ${iteration} in ${formatState(state)}` });
         }
+        if (!w.variant) return;
+        const t = evalAssertion(w.variant, state);
+        const name = printExpr(w.variant);
+        if (iteration > 0 && typeof t === 'number' && t >= lastVariant.get(loopId)!) {
+          stop({ kind: 'variant', ...at, message: `variant ${name} did not decrease in iteration ${iteration}: ${lastVariant.get(loopId)} before, ${t} after` });
+        }
+        if (evalAssertion(w.cond, state) === true && (typeof t !== 'number' || t < 0)) {
+          stop({ kind: 'variant', ...at, message: `variant ${name} is ${t ?? 'undefined'} while the loop still runs, in ${formatState(state)}` });
+        }
+        if (typeof t === 'number') lastVariant.set(loopId, t);
       },
     });
     if (run.status === 'undefined') {
-      if (run.undef!.reason === 'iteration-limit' && !totalClaimed) return undefined; // partial correctness only
-      return {
-        kind: run.undef!.reason === 'iteration-limit' ? 'non-termination' : 'undefined', input, state: input,
-        message: run.undef!.message,
-      };
+      if (run.undef!.reason === 'iteration-limit') return 'inconclusive';
+      return { kind: 'undefined', input, state: input, message: run.undef!.message };
     }
     if (program.post && evalAssertion(program.post, run.state!) !== true) {
       return {
@@ -231,6 +265,10 @@ function summarize(
       ? ' The invariant is not inductive: it holds in every run tried but one iteration can break it from some state; strengthen it.'
       : '';
     return `UNPROVEN: ${failed.length} condition(s) fail with ${box}, yet no execution of ${runs.count} tried violates the annotations.${hint}`;
+  }
+  if (verdict === 'checked-in-sample') {
+    return `No condition failed on the sampled states and none of ${runs.count} executions violates the annotations: ` +
+      `${total ? 'total' : 'partial'} correctness is supported by a sample of the box only (evidence, not a proof).`;
   }
   return `All conditions hold for ${box} and all ${runs.count} executions satisfy the annotations: ` +
     `${total ? 'total' : 'partial'} correctness is supported by bounded checking (this is evidence, not a proof).`;

@@ -30,7 +30,10 @@ test('verification conditions of the power program', () => {
   assert.equal(printExpr(preserve.goal), 'R * X * X ^ (Y - 1) = x ^ y ∧ Y - 1 ≥ 0 ∧ X = x');
   assert.ok(preserve.derivation.some((l) => l === 'wp(Y := Y - 1, R * X ^ Y = x ^ y ∧ Y ≥ 0 ∧ X = x) = R * X ^ (Y - 1) = x ^ y ∧ Y - 1 ≥ 0 ∧ X = x'));
   assert.equal(printExpr(vcs[0].goal), '1 * X ^ Y = x ^ y ∧ Y ≥ 0 ∧ X = x');
-  assert.equal(printExpr(vcs[4].goal), 'Y - 1 < t0');
+  // The old value t0 of the variant is bound to the variant itself, so it is not a free variable of the check.
+  assert.equal(printExpr(vcs[4].hypothesis), 'R * X ^ Y = x ^ y ∧ Y ≥ 0 ∧ X = x ∧ Y > 0');
+  assert.equal(printExpr(vcs[4].goal), 'Y - 1 < Y');
+  assert.ok(vcs[4].derivation.some((l) => l.includes('t0 ↦ Y')));
 });
 
 test('the power program is verified in bounds with total correctness', () => {
@@ -131,4 +134,98 @@ test('vacuous conditions are pointed out', () => {
   assert.match(narrow.summary, /condition\(s\) 3 never had a true hypothesis/);
   const wide = verifyProgram(load('not-inductive.sipl'), { range: [0, 12] });
   assert.doesNotMatch(wide.summary, /never had a true hypothesis/);
+});
+
+const FLAG_6 = [
+  '//@ pre: B = B ∧ C = C ∧ D = D ∧ E = E ∧ F = F',
+  'begin',
+  '  X := 0;',
+  '  //@ invariant: X ≠ 5 ∨ B ≠ 1 ∨ C ≠ 2 ∨ D ≠ 3 ∨ E ≠ 4 ∨ F ≠ 0',
+  '  while X < 10 do X := X + 2',
+  'end',
+  '//@ post: X ≥ 10',
+].join('\n');
+
+test('a sampled check never claims to cover all states', () => {
+  const r = verifyProgram(parseProgram(FLAG_6));
+  assert.equal(r.verdict, 'checked-in-sample');
+  assert.match(r.summary, /sampled/);
+  assert.doesNotMatch(r.summary, /all variables in/);
+  assert.equal(verifyProgram(parseProgram(FLAG_6), { maxCases: 3_000_000 }).verdict, 'unproven');
+});
+
+test('every condition of the power program is checked exhaustively', () => {
+  const r = verifyProgram(load('power.sipl'));
+  assert.ok(r.vcs.every((v) => v.result.status === 'checked' && v.result.mode === 'exhaustive'));
+});
+
+test('runs cut at the run limit are reported as truncated', () => {
+  const r = verifyProgram(load('gcd.sipl'), { maxRuns: 3 });
+  assert.deepEqual([r.runs.count, r.runs.mode], [3, 'truncated']);
+  assert.equal(r.verdict, 'checked-in-sample');
+});
+
+const NESTED = [
+  '//@ pre: A = a ∧ B = b ∧ a ≥ 0 ∧ b ≥ 0',
+  'begin R := 0;',
+  '  //@ invariant: R = (a - A) * b ∧ A ≥ 0 ∧ B = b ∧ b ≥ 0',
+  '  //@ variant: A',
+  '  while A > 0 do begin',
+  '    C := B;',
+  '    //@ invariant: R + C = (a - A + 1) * b ∧ C ≥ 0 ∧ A > 0 ∧ B = b ∧ b ≥ 0',
+  '    //@ variant: C',
+  '    while C > 0 do begin R := R + 1; C := C - 1 end;',
+  '    A := A - 1 end',
+  'end',
+  '//@ post: R = a * b',
+].join('\n');
+
+test('nested loops: the outer variant passes the inner loop by the frame rule', () => {
+  const r = verifyProgram(parseProgram(NESTED), { range: [0, 4] });
+  assert.equal(r.verdict, 'checked-in-bounds', JSON.stringify(r.vcs.filter((v) => v.result.status !== 'checked').map((v) => [v.title, printExpr(v.goal)])));
+  assert.equal(r.total, true);
+  const dec = r.vcs.find((v) => v.kind === 'variant-decrease' && v.loop!.span.start.line === 5)!;
+  assert.equal(printExpr(dec.goal), 'A - 1 < A');
+  assert.ok(dec.derivation.some((l) => /frame/.test(l)));
+});
+
+test('an inner loop that changes the outer variant is reported, not failed', () => {
+  const src = [
+    '//@ pre: A ≥ 0',
+    'begin',
+    '  //@ invariant: A ≥ 0',
+    '  //@ variant: A',
+    '  while A > 0 do begin',
+    '    //@ invariant: A ≥ 0',
+    '    while A > 5 do A := A - 1;',
+    '    A := A - 1',
+    '  end',
+    'end',
+  ].join('\n');
+  const r = verifyProgram(parseProgram(src));
+  assert.deepEqual(r.diagnostics.map((d) => [d.code, d.severity]), [['V003', 'warning']]);
+  assert.ok(!r.vcs.some((v) => v.kind === 'variant-decrease' && v.loop!.span.start.line === 5));
+  assert.equal(r.total, false);
+  assert.notEqual(r.verdict, 'refuted');
+});
+
+test('runs that exceed the iteration budget are inconclusive, not violations', () => {
+  const r = verifyProgram(load('sum.sipl'), { range: [12000, 12002] });
+  assert.notEqual(r.verdict, 'refuted');
+  assert.equal(r.runs.inconclusive, 3);
+  assert.match(r.summary, /did not finish/);
+  const more = verifyProgram(load('sum.sipl'), { range: [12000, 12002], maxIterations: 20_000 });
+  assert.equal(more.runs.inconclusive, 0);
+});
+
+test('runs check the variant at every loop head', () => {
+  const src = readExample('verify/power.sipl').replace('//@ variant: Y', '//@ variant: 10 - Y');
+  const r = verifyProgram(parseProgram(src));
+  assert.equal(r.verdict, 'refuted');
+  assert.equal(r.runs.violations[0].kind, 'variant');
+});
+
+test('unknown functions in annotations are rejected', () => {
+  assert.throws(() => parseProgram('begin skip end\n//@ post: foo(X) = 1'), /E006|unknown function foo/);
+  assert.throws(() => parseAssertion('gcd(X) = 1'), /gcd/);
 });

@@ -6,6 +6,38 @@ import type { Term } from './term.js';
  * Superscripts are written with `^`; the local superposition S^{x1,...,xn} is written `S^[x1,...,xn]`.
  */
 export function printTerm(t: Term): string {
+  return print(t);
+}
+
+/** Like `printTerm`, but stops after about `maxLength` characters and abbreviates the rest with `…`. */
+export function printTermLimited(t: Term, maxLength: number): string {
+  const budget = { left: maxLength };
+  try {
+    return print(t, budget);
+  } catch (e) {
+    if (e !== TOO_LONG) throw e;
+    return `${print(t, { left: Infinity }, 1)}…`;
+  }
+}
+
+const TOO_LONG = Symbol('too long');
+
+/** Prints `t`; with a budget, stops as soon as the output would exceed it; `depth` limits nesting for abbreviations. */
+function print(t: Term, budget = { left: Infinity }, depth = Infinity): string {
+  if (depth <= 0) return '…';
+  let children = 0;
+  const printTerm = (x: Term) => {
+    const s = print(x, budget, depth - 1);
+    children += s.length;
+    return s;
+  };
+  const out = printNode(t, printTerm);
+  budget.left -= out.length - children; // count only this node's own characters
+  if (budget.left < 0) throw TOO_LONG;
+  return out;
+}
+
+function printNode(t: Term, printTerm: (x: Term) => string): string {
   switch (t.t) {
     case 'AS':
       return `AS^${t.variable}(${printTerm(t.arg)})`;

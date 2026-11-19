@@ -21,11 +21,11 @@ test('approximations of practical work 7 (x ÷ y)', () => {
 
 test('testing the approximations on [X ↦ 7, Y ↦ 4] as in the practicum', () => {
   const st = { X: 7, Y: 4 };
-  assert.equal(applyApproximation(div, 'f', 0, st).ok, false);
-  const f1 = applyApproximation(div, 'f', 1, st);
+  assert.equal(applyApproximation(div, 'f', 0, st, { record: true }).ok, false);
+  const f1 = applyApproximation(div, 'f', 1, st, { record: true });
   assert.equal(f1.ok, false);
   assert.equal(f1.ok === false && f1.undef.reason, 'bottom');
-  const f2 = applyApproximation(div, 'f', 2, st);
+  const f2 = applyApproximation(div, 'f', 2, st, { record: true });
   assert.deepEqual([f2.ok, f2.ok && f2.value], [true, 1]);
   assert.ok(f2.steps.some((s) => s.formula === 'AF_CALL' && s.detail.includes('[X ↦ 3, Y ↦ 4]')));
   assert.ok(f1.steps.some((s) => s.formula === 'AF_BOT'));
@@ -86,4 +86,18 @@ test('huge approximation terms are not printed in full', () => {
 
 test('unknown function is rejected', () => {
   assert.throws(() => approximationTerms(div, 'g', 2), /no function g/);
+});
+
+test('approximations of a doubly recursive function are evaluated quickly', () => {
+  const p = parseProgram(readExample('rec-fib.sipl'));
+  const started = Date.now();
+  const table = describeApproximations(p, 'fib', 20, Array.from({ length: 11 }, (_, n) => ({ N: n })));
+  assert.equal(table.rows[10].values[20], 55);
+  const one = applyApproximation(p, 'fib', 18, { N: 5 }, { record: false });
+  assert.deepEqual([one.ok, one.steps.length], [true, 0]);
+  assert.ok(Date.now() - started < 3_000, `took ${Date.now() - started} ms`);
+});
+
+test('the approximation index is capped', () => {
+  assert.throws(() => approximationTerms(div, 'f', 201), /at most 200/);
 });

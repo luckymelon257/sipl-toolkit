@@ -13,8 +13,12 @@ const BOTTOM: Term = { t: 'BOTTOM' };
  * of superposition: S(…, ⊥, …) = ⊥, S^[…](⊥, …) = ⊥, IF(b, ⊥, ⊥) = ⊥.
  * The returned terms share subterms (fi occurs by reference inside f(i+1)), so their size in memory stays linear.
  */
+export const MAX_APPROXIMATION = 200;
+
 export function approximationTerms(program: Program, name: string, k: number): Term[] {
   if (!program.functions.some((f) => f.name === name)) throw new Error(`no function ${name} in the program`);
+  // Deeper chains nest terms beyond what the evaluator's stack can hold.
+  if (k > MAX_APPROXIMATION) throw new Error(`k must be at most ${MAX_APPROXIMATION}, got ${k}`);
   const phis = new Map(program.functions.map((f) => [f.name, buildFunctional(program, f.name)]));
   let current = new Map([...phis.keys()].map((n) => [n, BOTTOM]));
   const chain: Term[] = [BOTTOM];
@@ -89,10 +93,12 @@ export type ApproxValue = ({ ok: true; value: number } | { ok: false; undef: Und
   truncated: boolean;
 };
 
-/** fk(st): applies the k-th approximation term to a state, recording the applied formulas. */
-export function applyApproximation(program: Program, name: string, k: number, st: State, maxSteps = 5_000): ApproxValue {
+/** fk(st): applies the k-th approximation term to a state, optionally recording the applied formulas. */
+export function applyApproximation(
+  program: Program, name: string, k: number, st: State, opts: { record?: boolean; maxSteps?: number } = {},
+): ApproxValue {
   const chain = approximationTerms(program, name, k);
-  return traceValue(chain[k], st, {}, { maxSteps });
+  return traceValue(chain[k], st, {}, { record: opts.record ?? false, maxSteps: opts.maxSteps });
 }
 
 export interface ApproxRow {

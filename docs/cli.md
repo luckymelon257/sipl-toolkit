@@ -6,7 +6,7 @@ sipl run    <file> [-s X=5 ...] [--trace] [--max-iterations N]
 sipl term   <file> [--explain]
 sipl approx <file> [-f NAME] [-k N] [-s X=7,Y=4] [--explain]
                    [--grid X=0..9,Y=1..5] [--expect EXPR] [--where COND] [--html FILE]
-sipl verify <file> [--range LO..HI] [--max-cases N]
+sipl verify <file> [--range LO..HI] [--max-cases N] [--max-iterations N]
 ```
 
 `<file>` може бути `-`; тоді програма читається зі стандартного входу. Кожна команда приймає `--json`.
@@ -25,19 +25,28 @@ sipl verify <file> [--range LO..HI] [--max-cases N]
 - з `-s` — значення кожної апроксимації на заданому стані, а з `--explain` ще й кроки обчислення `fk`;
 - з `--grid` — таблиця, перевірки та, за потреби, HTML-звіт ([fixpoint.md](fixpoint.md)).
 
+`approx` відхиляє налаштування, що нічого не перевіряють (код 64):
+- `--grid` або `-s` не задає параметр функції чи змінну, яку вона читає;
+- `--expect` або `--where` використовує змінну, якої немає в сітці;
+- `-k` більше за 200.
+
+Від'ємні значення опцій можна писати як `--range -3..8`, так і `--range=-3..8`.
+
 ## Коди завершення
 
 | Код | Значення |
 |----:|----------|
 | 0 | успіх |
 | 1 | синтаксична або статична помилка (для `verify` ще V001/V002) |
-| 2 | результат невизначений (`run`); невідповідність або немонотонність (`approx`); умова не виконується чи прогін порушує анотацію (`verify`) |
+| 2 | результат невизначений (`run`); невідповідність, немонотонність або нічого перевіряти — немає станів після `--where` чи порівнянних значень (`approx`); умова не виконується чи прогін порушує анотацію (`verify`) |
 | 64 | неправильний виклик: невідома команда чи опція, погане значення опції |
 | 66 | вхідний файл неможливо прочитати |
+| 70 | внутрішня помилка інструмента |
+| 73 | неможливо записати вихідний файл (`--html`) |
 
 ## JSON
 
-З `--json` команда друкує в stdout один JSON-документ (навіть у разі помилки, крім кодів 64 і 66). Спільні поля:
+З `--json` команда друкує в stdout один JSON-документ, навіть у разі помилки. Винятки: коди 64, 66, 70, 73 і відхилені налаштування `approx` (порожня перевірка); для них є лише повідомлення в stderr. Спільні поля:
 
 ```json
 {
@@ -58,6 +67,6 @@ sipl verify <file> [--range LO..HI] [--max-cases N]
 | `run` | `result: { status: "defined" \| "undefined", input, state?, undefined?: { reason, message }, steps? }` |
 | `term` | `term` (рядок), `functions` (`{ ім'я: φ }`), `derivation?` (`[{ rule, nodeId, lhs, rhs }]`) |
 | `approx` | `function`, `k`, `terms` (рядки `f0…fk`), `values?` (`[{ k, value \| null, undefined? }]`), `report?` (`{ rows, checks, definedCount }`) |
-| `verify` | `report: { verdict, total, range, summary, vcs: [{ id, kind, title, loopId?, hypothesis, goal, derivation, result }], runs: { count, mode, violations } }` |
+| `verify` | `report: { verdict, total, range, summary, vcs: [{ id, kind, title, loopId?, hypothesis, goal, derivation, result }], runs: { count, mode, violations, inconclusive } }` |
 
 Поле `schemaVersion` змінюється лише тоді, коли зміна несумісна з попереднім форматом.

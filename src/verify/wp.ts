@@ -1,6 +1,7 @@
 import type { Expr, Program, Stm, While } from '../ast.js';
 import { freeVars, walk } from '../ast.js';
 import { printExpr } from '../assertion.js';
+import type { Diagnostic } from '../span.js';
 
 export type VCKind = 'entry' | 'preserve' | 'exit' | 'variant-bound' | 'variant-decrease';
 
@@ -69,8 +70,21 @@ function stmText(s: Stm): string {
 
 const at = (w: While) => `${w.span.start.line}:${w.span.start.column}`;
 
+/** Thrown when the frame rule cannot carry a variant obligation through an inner loop. */
+class FrameError extends Error {
+  constructor(readonly inner: While) {
+    super('inner loop changes the variant');
+  }
+}
+
+/** Variables assigned anywhere in a statement. */
+function assigned(s: Stm): Set<string> {
+  return new Set([...walk(s)].flatMap((n) => (n.kind === 'assign' ? [n.target] : [])));
+}
+
 class VCGen {
   readonly vcs: VC[] = [];
+  readonly warnings: Diagnostic[] = [];
   private readonly seen = new Set<string>();
   private readonly used: Set<string>;
 
@@ -94,8 +108,12 @@ class VCGen {
     this.vcs.push({ ...vc, id: this.vcs.length + 1 });
   }
 
-  /** wp(s, q); loops contribute their side conditions to `vcs`; `log` collects the derivation. */
-  wp(s: Stm, q: Expr, log: string[]): Expr {
+  /**
+   * wp(s, q); loops contribute their side conditions to `vcs`; `log` collects the derivation.
+   * In `frame` mode (used for variant obligations) an inner loop is passed only when it assigns no variable
+   * of `q`: then `q` holds after it (frame rule) and no further conditions are generated.
+   */
+  wp(s: Stm, q: Expr, log: string[], frame = false): Expr {
     switch (s.kind) {
       case 'assign': {
         const r = substitute(q, s.target, s.value);
@@ -103,21 +121,27 @@ class VCGen {
         return r;
       }
       case 'seq':
-        return this.wp(s.first, this.wp(s.second, q, log), log);
+        return this.wp(s.first, this.wp(s.second, q, log, frame), log, frame);
       case 'block':
-        return this.wp(s.body, q, log);
+        return this.wp(s.body, q, log, frame);
       case 'skip':
         log.push(`wp(skip, ${printExpr(q)}) = ${printExpr(q)}`);
         return q;
       case 'if': {
-        const a = this.wp(s.then, q, log);
-        const b = this.wp(s.else, q, log);
+        const a = this.wp(s.then, q, log, frame);
+        const b = this.wp(s.else, q, log, frame);
         const r = and(implies(s.cond, a), implies(not(s.cond), b));
         log.push(`wp(${stmText(s)}, ${printExpr(q)}) = ${printExpr(r)}`);
         return r;
       }
-      case 'while':
-        return this.loop(s, q, log);
+      case 'while': {
+        if (!frame) return this.loop(s, q, log);
+        const changed = assigned(s);
+        const touched = freeVars(q).filter((v) => changed.has(v));
+        if (touched.length > 0) throw new FrameError(s);
+        log.push(`wp(${stmText(s)}, ${printExpr(q)}) = ${printExpr(q)}   [frame: the loop at ${at(s)} does not change ${freeVars(q).join(', ')}]`);
+        return q;
+      }
     }
   }
 
@@ -144,14 +168,25 @@ class VCGen {
         title: `${where}: the variant ${printExpr(t)} is non-negative while the loop runs`,
         hypothesis: and(inv, w.cond), goal: compare('>=', t, num(0, t)), derivation: [],
       });
-      const t0 = variable(this.fresh('t'), t);
+      const t0name = this.fresh('t');
       const decLog: string[] = [];
-      this.add({
-        kind: 'variant-decrease', loop: w,
-        title: `${where}: every iteration decreases the variant ${printExpr(t)} (termination)`,
-        hypothesis: and(and(inv, w.cond), compare('=', t, t0)),
-        goal: this.wp(w.body, compare('<', t, t0), decLog), derivation: decLog,
-      });
+      try {
+        const raw = this.wp(w.body, compare('<', t, variable(t0name, t)), decLog, true);
+        const goal = substitute(raw, t0name, t);
+        decLog.push(`${t0name} ↦ ${printExpr(t)} (the value of the variant before the iteration): ${printExpr(goal)}`);
+        this.add({
+          kind: 'variant-decrease', loop: w,
+          title: `${where}: every iteration decreases the variant ${printExpr(t)} (termination)`,
+          hypothesis: and(inv, w.cond), goal, derivation: decLog,
+        });
+      } catch (e) {
+        if (!(e instanceof FrameError)) throw e;
+        this.warnings.push({
+          severity: 'warning', code: 'V003', span: w.span,
+          message: `cannot check that the variant ${printExpr(t)} decreases: the inner loop at ${at(e.inner)} ` +
+            'changes variables it depends on; termination of this loop is not checked',
+        });
+      }
     }
     log.push(`wp(${stmText(w)}, ${printExpr(q)}) = ${printExpr(inv)}   [invariant of the ${where}]`);
     return inv;
@@ -161,10 +196,10 @@ class VCGen {
 /**
  * Verification conditions of an annotated program (Hoare logic with weakest preconditions):
  * entry `pre → wp(S, post)`; for each loop with invariant I, condition b and variant t:
- * `I ∧ b → wp(body, I)`, `I ∧ ¬b → Q`, and with a variant `I ∧ b → t ≥ 0`, `I ∧ b ∧ t = t0 → wp(body, t < t0)`.
- * Throws when a loop has no invariant.
+ * `I ∧ b → wp(body, I)`, `I ∧ ¬b → Q`, and with a variant `I ∧ b → t ≥ 0`, `I ∧ b → wp(body, t < t0)[t0 ↦ t]`.
+ * Throws when a loop has no invariant. Conditions that cannot be generated are reported in `warnings`.
  */
-export function generateVCs(program: Program): VC[] {
+export function generateVCs(program: Program, warnings: Diagnostic[] = []): VC[] {
   const gen = new VCGen(program);
   const pre = program.pre ?? TRUE;
   const post = program.post ?? TRUE;
@@ -177,5 +212,6 @@ export function generateVCs(program: Program): VC[] {
       ? 'the precondition establishes the weakest precondition of the program (induction base of the first loop)'
       : 'the precondition implies the weakest precondition of the program',
   };
+  warnings.push(...gen.warnings);
   return [entry, ...gen.vcs].map((vc, i) => ({ ...vc, id: i + 1 }));
 }

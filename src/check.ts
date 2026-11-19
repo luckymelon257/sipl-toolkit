@@ -88,6 +88,9 @@ function checkFunctions(program: Program): Diagnostic[] {
     if (arity.has(f.name)) out.push(diag('error', 'E302', `function ${f.name} is declared twice`, f.nameSpan));
     else arity.set(f.name, f.params.length);
     f.params.forEach((p, i) => {
+      if (program.functions.some((g) => g.name === p)) {
+        out.push(diag('error', 'E305', `parameter ${p} of ${f.name} has the name of a function; rename one of them`, f.paramSpans[i]));
+      }
       if (f.params.indexOf(p) !== i) {
         out.push(diag('error', 'E303', `parameter ${p} of ${f.name} is declared twice`, f.paramSpans[i]));
       }

@@ -1,6 +1,6 @@
 import type { Program } from '../ast.js';
 import { State, checkedInt, formatState } from '../values.js';
-import { printTerm } from './print.js';
+import { printTermLimited } from './print.js';
 import { BaseFn, Term, buildFunctional, buildTerm } from './term.js';
 
 /** Why a value is undefined (↑). */
@@ -9,6 +9,7 @@ export type UndefinedReason =
   | 'overflow' // the result is outside the safe integer range
   | 'iteration-limit' // WH did not finish within the iteration budget (probably does not terminate)
   | 'call-depth' // recursion did not finish within the call-depth budget
+  | 'stack-limit' // the interpreter ran out of stack before the call-depth budget (the term is too deeply nested)
   | 'bottom' // ⊥ was applied: an approximation f_k is undefined here
   | 'unknown-function';
 
@@ -25,7 +26,7 @@ export interface EvalOptions {
   level?: number;
   /** Total WH iterations allowed (default 100 000). */
   maxIterations?: number;
-  /** Nested calls allowed (default 1 000). */
+  /** Nested calls allowed (default 500). */
   maxCallDepth?: number;
   /** Record the applied formulas (default false). */
   record?: boolean;
@@ -87,7 +88,7 @@ class Evaluator {
     private readonly opts: EvalOptions,
   ) {
     this.maxIterations = opts.maxIterations ?? 100_000;
-    this.maxCallDepth = opts.maxCallDepth ?? 1_000;
+    this.maxCallDepth = opts.maxCallDepth ?? 500;
     this.maxSteps = opts.maxSteps ?? 5_000;
   }
 
@@ -97,7 +98,7 @@ class Evaluator {
       this.truncated = true;
       return;
     }
-    this.steps.push({ formula, depth: this.depth, term: printTerm(term), detail: detail() });
+    this.steps.push({ formula, depth: this.depth, term: printTermLimited(term, 300), detail: detail() });
   }
 
   /** Applies a state transformer term (FS). */
@@ -118,13 +119,12 @@ class Evaluator {
         return this.state(c ? t.then : t.else, st, level);
       }
       case 'WH': {
-        const cond = printTerm(t.cond);
         let cur = st;
         for (let k = 0; ; k++) {
           this.opts.onLoopHead?.(t.ref?.nodeId ?? -1, k, cur);
           const c = this.bool(t.cond, cur, level);
           const at = cur;
-          this.log('AF_WH', t, () => `st${k} = ${formatState(at)}, ${cond}(st${k}) = ${c}${c ? '' : `, result st${k}`}`);
+          this.log('AF_WH', t, () => `st${k} = ${formatState(at)}, ${printTermLimited(t.cond, 300)}(st${k}) = ${c}${c ? '' : `, result st${k}`}`);
           if (!c) return cur;
           if (++this.iterations > this.maxIterations) {
             throw new Undef({
@@ -176,10 +176,9 @@ class Evaluator {
       case 'CALL': {
         const args = t.args.map((a) => this.int(a, st, level));
         const bind = Object.fromEntries(t.params.map((p, i) => [p, args[i]]));
-        const callee = printTerm(t.callee);
         this.log('AF_CALL', t, () => args.length === 0
-          ? `${callee}(${formatState(st)})`
-          : `${callee}(${formatState(st)} ∇ ${formatState(bind)})`);
+          ? `${printTermLimited(t.callee, 300)}(${formatState(st)})`
+          : `${printTermLimited(t.callee, 300)}(${formatState(st)} ∇ ${formatState(bind)})`);
         return this.apply(t.callee, { ...st, ...bind }, level);
       }
       case 'BOTTOM':
@@ -200,7 +199,10 @@ class Evaluator {
     const def = this.env[callee.name];
     if (!def) throw new Undef({ reason: 'unknown-function', message: `unknown function ${callee.name}` });
     if (this.depth >= this.maxCallDepth) {
-      throw new Undef({ reason: 'call-depth', message: `recursion deeper than ${this.maxCallDepth} calls (it may not terminate)` });
+      throw new Undef({
+        reason: 'call-depth',
+        message: `recursion deeper than ${this.maxCallDepth} calls: either it does not terminate or it needs a larger depth budget`,
+      });
     }
     this.depth++;
     try {
@@ -224,8 +226,14 @@ function attempt<T>(f: () => T): { ok: true; result: T } | { ok: false; undef: U
     return { ok: true, result: f() };
   } catch (e) {
     if (e instanceof Undef) return { ok: false, undef: e.undef };
-    if (e instanceof RangeError) {
-      return { ok: false, undef: { reason: 'call-depth', message: 'recursion exhausted the interpreter stack (it may not terminate)' } };
+    if (e instanceof RangeError && /call stack/i.test(e.message)) {
+      return {
+        ok: false,
+        undef: {
+          reason: 'stack-limit',
+          message: 'the interpreter ran out of stack: the computation is nested too deeply for this implementation (this says nothing about termination)',
+        },
+      };
     }
     throw e;
   }

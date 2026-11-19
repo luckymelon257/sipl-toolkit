@@ -102,3 +102,10 @@ test('html heatmap needs one or two varying variables', () => {
   assert.equal(html.match(/<rect class="cell"/g), null);
   assert.match(html, /heatmap needs/);
 });
+
+test('the summary names the approximated function', () => {
+  const fib = parseProgram(readExample('rec-fib.sipl'));
+  const text = renderTable(testApproximations(fib, 'fib', { k: 3, states: gridStates('N=0..6') }));
+  assert.match(text, /fib3 is still not defined on 3 test state\(s\)/);
+  assert.doesNotMatch(text, /\bf3\b/);
+});

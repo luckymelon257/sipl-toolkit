@@ -15,8 +15,9 @@ function summary(report: ApproxReport): string[] {
     `defined on: ${table.definedCount.map((c, i) => `${table.fn}${i}: ${c}/${rows.length}`).join('  ')}`,
     `monotone: ${checks.monotone ? 'yes' : 'NO'} (once defined, a value never changes in later approximations)`,
     checks.allDefined
-      ? `f${table.k} is defined on all test states; the defined part stopped growing at ${table.fn}${checks.stabilizedAt}`
-      : `f${table.k} is still not defined on ${rows.length - table.definedCount[table.k]} test state(s); raise k to see more`,
+      ? `${table.fn}${table.k} is defined on all test states; the defined part stopped growing at ${table.fn}${checks.stabilizedAt}`
+      : `${table.fn}${table.k} is still not defined on ${rows.length - table.definedCount[table.k]} test state(s): ` +
+        'a larger k may define them, unless the recursion does not terminate there',
   ];
   if (report.expect !== undefined) {
     const comparable = rows.filter((r) => r.firstDefined !== null && r.expected !== null).length;

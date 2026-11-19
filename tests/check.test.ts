@@ -74,3 +74,7 @@ test('ghost variables in annotations are not program inputs', () => {
   assert.equal(r.ok, true);
   assert.deepEqual(r.inputs, ['Y', 'X']);
 });
+
+test('a parameter named like a function is an error', () => {
+  assert.deepEqual(codes('program func N = 5; func f(N) = N + 1 begin X := f(2) end'), ['E305']);
+});

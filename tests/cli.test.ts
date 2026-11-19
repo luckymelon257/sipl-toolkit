@@ -159,3 +159,35 @@ test('stdin input with -', () => {
   assert.equal(r.code, 0);
   assert.match(r.out, /M ↦ 9/);
 });
+
+test('approx rejects test setups that check nothing', () => {
+  const div = ex('rec-div.sipl');
+  const noY = sipl(['approx', div, '--grid', 'X=0..3']);
+  assert.equal(noY.code, 64);
+  assert.match(noY.err, /Y/);
+  assert.equal(sipl(['approx', div, '--grid', 'X=0..3,Y=1', '--expect', 'foo(X)']).code, 64);
+  const z = sipl(['approx', div, '--grid', 'X=0..3,Y=1', '--expect', 'Z + 1']);
+  assert.equal(z.code, 64);
+  assert.match(z.err, /Z/);
+  assert.equal(sipl(['approx', div, '-s', 'X=7']).code, 64);
+  const empty = sipl(['approx', div, '--grid', 'X=0..3,Y=1..2', '--where', 'Y > 5']);
+  assert.equal(empty.code, 2);
+  assert.match(empty.err, /no test states/);
+  const none = sipl(['approx', div, '--grid', 'X=0..3,Y=1', '--expect', 'X div (Y - 1)']);
+  assert.equal(none.code, 2);
+  assert.match(none.err, /nothing to compare/);
+});
+
+test('approx: unwritable html report and huge k are errors with their own codes', () => {
+  const r = sipl(['approx', ex('rec-div.sipl'), '-k', '2', '--grid', 'X=0..2,Y=1', '--html', '/nonexistent/dir/r.html']);
+  assert.equal(r.code, 73);
+  assert.match(r.err, /cannot write/);
+  assert.doesNotMatch(r.err, /at .*\.js:\d+/);
+  assert.equal(sipl(['approx', ex('rec-div.sipl'), '-k', '3000', '--grid', 'X=0..1,Y=1']).code, 64);
+});
+
+test('a negative range works as written in the help', () => {
+  const r = sipl(['verify', ex('verify/power.sipl'), '--range', '-3..8']);
+  assert.equal(r.code, 0, r.err);
+  assert.match(sipl(['--help']).out, /--range -3\.\.8/);
+});
