@@ -38,3 +38,8 @@ export function spanBetween(from: SourceSpan, to: SourceSpan): SourceSpan {
 export function formatDiagnostic(d: Diagnostic, file = '<input>'): string {
   return `${file}:${d.span.start.line}:${d.span.start.column}: ${d.severity} ${d.code}: ${d.message}`;
 }
+
+/** The JavaScript engine ran out of call stack (deeply nested or very long input). */
+export function isStackOverflow(e: unknown): boolean {
+  return e instanceof RangeError && /call stack/i.test(e.message);
+}

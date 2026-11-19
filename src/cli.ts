@@ -14,7 +14,7 @@ import { parseAssertion } from './parser.js';
 import { EvalStep, runProgram } from './semantics/evaluate.js';
 import { printTerm } from './semantics/print.js';
 import { buildFunctional, buildTerm, deriveTerm } from './semantics/term.js';
-import { Diagnostic, SiplError } from './span.js';
+import { Diagnostic, SiplError, isStackOverflow } from './span.js';
 import { formatState, parseAssignments } from './values.js';
 import { verifyProgram } from './verify/verify.js';
 
@@ -273,6 +273,7 @@ function cmdVerify(out: Out, v: Values): number {
     range = [Number(m[1]), Number(m[2])];
   }
   const maxCases = intOption(v['max-cases'], '--max-cases');
+  if (maxCases === 0) throw new UsageError('--max-cases must be at least 1');
   const maxIterations = intOption(v['max-iterations'], '--max-iterations');
   const loaded = load(out, 'verify');
   if (!loaded) return EXIT.invalid;
@@ -391,6 +392,10 @@ export function main(argv: string[]): number {
     }
     if (e instanceof EmptyCheckError) {
       console.error(`sipl: ${e.message}`);
+      return EXIT.failed;
+    }
+    if (isStackOverflow(e)) {
+      console.error('sipl: the input is too large or nested too deeply for this implementation (call stack exhausted)');
       return EXIT.failed;
     }
     console.error(`sipl: internal error: ${(e as Error).message}`);

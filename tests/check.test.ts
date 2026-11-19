@@ -78,3 +78,10 @@ test('ghost variables in annotations are not program inputs', () => {
 test('a parameter named like a function is an error', () => {
   assert.deepEqual(codes('program func N = 5; func f(N) = N + 1 begin X := f(2) end'), ['E305']);
 });
+
+test('a program nested too deeply for the call stack is a diagnostic, not an exception', () => {
+  const r = check(`begin ${'begin '.repeat(20_000)}skip${' end'.repeat(20_000)} end`);
+  assert.equal(r.ok, false);
+  assert.deepEqual(codes('begin X := ' + '('.repeat(20_000) + '1' + ')'.repeat(20_000) + ' end'), ['E102']);
+  assert.deepEqual(r.diagnostics.map((d) => d.code), ['E102']);
+});

@@ -21,6 +21,8 @@ class Parser {
   private pos = 0;
   /** Set when a SIPL-R construct is parsed. */
   extended = false;
+  /** Outcome of `atom` at each token position: without it, nested '(' backtracking takes exponential time. */
+  private readonly atoms = new Map<number, { expr: Expr; end: number; extended: boolean } | { error: unknown }>();
 
   constructor(
     private readonly tokens: Token[],
@@ -292,6 +294,26 @@ class Parser {
   }
 
   private atom(): Expr {
+    const from = this.pos;
+    const outer = this.extended;
+    let memo = this.atoms.get(from);
+    if (!memo) {
+      this.extended = false;
+      try {
+        memo = { expr: this.parseAtom(), end: this.pos, extended: this.extended };
+      } catch (error) {
+        memo = { error };
+      }
+      this.atoms.set(from, memo);
+    }
+    this.extended = outer;
+    if ('error' in memo) throw memo.error;
+    this.pos = memo.end;
+    this.extended ||= memo.extended;
+    return memo.expr;
+  }
+
+  private parseAtom(): Expr {
     const tok = this.peek();
     if (this.mode === 'assertion' && tok.kind === 'ident' && (tok.text === 'true' || tok.text === 'false')) {
       this.next();

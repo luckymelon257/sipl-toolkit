@@ -1,4 +1,5 @@
 import type { Program } from '../ast.js';
+import { isStackOverflow } from '../span.js';
 import { State, checkedInt, formatState } from '../values.js';
 import { printTermLimited } from './print.js';
 import { BaseFn, Term, buildFunctional, buildTerm } from './term.js';
@@ -226,7 +227,7 @@ function attempt<T>(f: () => T): { ok: true; result: T } | { ok: false; undef: U
     return { ok: true, result: f() };
   } catch (e) {
     if (e instanceof Undef) return { ok: false, undef: e.undef };
-    if (e instanceof RangeError && /call stack/i.test(e.message)) {
+    if (isStackOverflow(e)) {
       return {
         ok: false,
         undef: {

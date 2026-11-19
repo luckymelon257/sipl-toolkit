@@ -215,3 +215,11 @@ test('every invalid example fails with its expected code and position', () => {
     assert.deepEqual([e.diagnostic.span.start.line, e.diagnostic.span.start.column], [Number(m[2]), Number(m[3])], f);
   }
 });
+
+test('nested parenthesised if-conditions parse in linear time', () => {
+  let b = 'X > 0';
+  for (let k = 0; k < 60; k++) b = `(if ${b} then 1 else 1 > 0)`;
+  const started = Date.now();
+  parseProgram(`begin if ${b} then skip else skip end`);
+  assert.ok(Date.now() - started < 2000);
+});

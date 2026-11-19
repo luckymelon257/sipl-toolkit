@@ -1,7 +1,7 @@
 import type { Expr, Program, Stm } from './ast.js';
 import { freeVars, walk } from './ast.js';
 import { parseProgram } from './parser.js';
-import { Diagnostic, SiplError, SourceSpan } from './span.js';
+import { Diagnostic, SiplError, SourceSpan, isStackOverflow } from './span.js';
 
 export interface CheckResult {
   ok: boolean;
@@ -14,6 +14,19 @@ export interface CheckResult {
 
 /** Parses and statically checks a program. Never throws on bad input. */
 export function check(source: string): CheckResult {
+  try {
+    return checkProgram(source);
+  } catch (e) {
+    if (!isStackOverflow(e)) throw e;
+    const start = { line: 1, column: 1, offset: 0 };
+    return {
+      ok: false, inputs: [], dialect: 'SIPL',
+      diagnostics: [diag('error', 'E102', 'the program is too long or nested too deeply for this implementation (call stack exhausted)', { start, end: start })],
+    };
+  }
+}
+
+function checkProgram(source: string): CheckResult {
   let program: Program;
   try {
     program = parseProgram(source);

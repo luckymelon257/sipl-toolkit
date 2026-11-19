@@ -191,3 +191,20 @@ test('a negative range works as written in the help', () => {
   assert.equal(r.code, 0, r.err);
   assert.match(sipl(['--help']).out, /--range -3\.\.8/);
 });
+
+test('verify: a check that tests nothing exits 2; --max-cases 0 is a usage error', () => {
+  const src = '//@ pre: X > 100\nbegin skip end\n//@ post: X = 77';
+  const r = sipl(['verify', '-'], src);
+  assert.equal(r.code, 2);
+  assert.match(r.out, /INCONCLUSIVE/);
+  assert.equal(sipl(['verify', ex('verify/power.sipl'), '--max-cases', '0']).code, 64);
+});
+
+test('input too large for the call stack exits 2 with a clear message', () => {
+  const long = `begin ${Array.from({ length: 3000 }, (_, i) => `X := ${i}`).join('; ')} end`;
+  const r = sipl(['term', '-'], long);
+  // Where the stack runs out (static check or term building) depends on the engine; either way it is reported.
+  assert.ok(r.code === 1 || r.code === 2, r.err);
+  assert.match(r.err, /call stack exhausted/);
+  assert.doesNotMatch(r.err, /internal error/);
+});
