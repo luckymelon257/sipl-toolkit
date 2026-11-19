@@ -6,14 +6,15 @@ import { State, checkedInt } from './values.js';
  * (unbound variable, division by zero, negative exponent, overflow, unknown function).
  * Connectives are evaluated left to right: `false ∧ ⊥ = false`, `true ∨ ⊥ = true`, `false → ⊥ = true`,
  * so a guard such as `Y ≥ 0 ∧ X ^ Y = 1` is defined for every Y.
+ * `ctx.overflow` is set when some value left the safe integer range.
  */
-export function evalAssertion(e: Expr, st: State): number | boolean | undefined {
+export function evalAssertion(e: Expr, st: State, ctx: { overflow: boolean } = { overflow: false }): number | boolean | undefined {
   const num = (x: Expr) => {
-    const v = evalAssertion(x, st);
+    const v = evalAssertion(x, st, ctx);
     return typeof v === 'number' ? v : undefined;
   };
   const bool = (x: Expr) => {
-    const v = evalAssertion(x, st);
+    const v = evalAssertion(x, st, ctx);
     return typeof v === 'boolean' ? v : undefined;
   };
   switch (e.kind) {
@@ -27,11 +28,11 @@ export function evalAssertion(e: Expr, st: State): number | boolean | undefined 
       const l = num(e.left);
       const r = num(e.right);
       if (l === undefined || r === undefined) return undefined;
-      return arith(e.op, l, r);
+      return arith(e.op, l, r, ctx);
     }
     case 'cond': {
       const c = bool(e.cond);
-      return c === undefined ? undefined : evalAssertion(c ? e.then : e.else, st);
+      return c === undefined ? undefined : evalAssertion(c ? e.then : e.else, st, ctx);
     }
     case 'call': {
       const args = e.args.map(num);
@@ -71,20 +72,18 @@ export function evalAssertion(e: Expr, st: State): number | boolean | undefined 
   }
 }
 
-function arith(op: string, a: number, b: number): number | undefined {
-  switch (op) {
-    case '+': return checkedInt(a + b);
-    case '-': return checkedInt(a - b);
-    case '*': return checkedInt(a * b);
-    case 'div': return b === 0 ? undefined : checkedInt(Math.floor(a / b));
-    case 'mod': return b === 0 ? undefined : checkedInt(a - b * Math.floor(a / b));
-    case '^': return power(a, b);
-  }
-  return undefined;
+function arith(op: string, a: number, b: number, ctx: { overflow: boolean }): number | undefined {
+  if ((op === 'div' || op === 'mod') && b === 0) return undefined;
+  if (op === '^' && b < 0) return undefined;
+  const r = op === '^' ? power(a, b) : checkedInt(
+    op === '+' ? a + b : op === '-' ? a - b : op === '*' ? a * b
+    : op === 'div' ? Math.floor(a / b) : a - b * Math.floor(a / b));
+  if (r === undefined) ctx.overflow = true;
+  return r;
 }
 
+/** base ^ exp for exp ≥ 0, or undefined on overflow. */
 function power(base: number, exp: number): number | undefined {
-  if (exp < 0) return undefined;
   let r = 1;
   for (let i = 0; i < exp; i++) {
     r *= base;

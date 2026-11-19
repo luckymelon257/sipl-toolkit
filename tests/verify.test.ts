@@ -148,8 +148,9 @@ const FLAG_6 = [
 
 test('a sampled check never claims to cover all states', () => {
   const r = verifyProgram(parseProgram(FLAG_6));
-  assert.equal(r.verdict, 'checked-in-sample');
-  assert.match(r.summary, /sampled/);
+  // The exit condition needs X ≥ 10, which the default box never reaches, so the check is not complete either.
+  assert.equal(r.verdict, 'inconclusive');
+  assert.match(r.summary, /random sample/);
   assert.doesNotMatch(r.summary, /all variables in/);
   assert.equal(verifyProgram(parseProgram(FLAG_6), { maxCases: 3_000_000 }).verdict, 'unproven');
 });
@@ -228,4 +229,33 @@ test('runs check the variant at every loop head', () => {
 test('unknown functions in annotations are rejected', () => {
   assert.throws(() => parseProgram('begin skip end\n//@ post: foo(X) = 1'), /E006|unknown function foo/);
   assert.throws(() => parseAssertion('gcd(X) = 1'), /gcd/);
+});
+
+test('a check that tests nothing is inconclusive, never a pass', () => {
+  const src = [
+    '//@ pre: X > 100',
+    'begin',
+    '  //@ invariant: X > 1000',
+    '  while X > 0 do X := X - 1',
+    'end',
+    '//@ post: X = 77',
+  ].join('\n');
+  const r = verifyProgram(parseProgram(src));
+  assert.equal(r.verdict, 'inconclusive');
+  assert.equal(r.runs.count, 0);
+  assert.match(r.summary, /never run/);
+  assert.equal(verifyProgram(parseProgram(src), { range: [95, 110] }).verdict, 'refuted');
+});
+
+test('overflow makes a run inconclusive, not a refutation', () => {
+  const r = verifyProgram(load('power.sipl'), { range: [0, 20] });
+  assert.notEqual(r.verdict, 'refuted', r.summary);
+  assert.ok(r.runs.inconclusive > 0);
+  assert.match(r.summary, /integer range/);
+});
+
+test('ghost variables that occur only in the postcondition range over the box in runs', () => {
+  const r = verifyProgram(parseProgram('//@ pre: X = X\nbegin X := 1 end\n//@ post: X = 1 ∧ Z = Z'));
+  assert.equal(r.verdict, 'checked-in-bounds', r.summary);
+  assert.equal(r.runs.count, 144);
 });
