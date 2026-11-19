@@ -7,7 +7,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
     "pretest": "node -e \"require('fs').rmSync('.test-build',{recursive:true,force:true})\" && tsc -p tsconfig.json",
-    "test": "c8 --check-coverage --lines 80 --reporter text-summary --include \".test-build/src/**\" node --test .test-build/tests/",
+    "test": "c8 --check-coverage --lines 80 --reporter text-summary --include \".test-build/src/**\" node --test .test-build/tests/*.test.js",
     "prepack": "npm run build"
   },
   "keywords": [
